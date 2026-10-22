@@ -29,7 +29,7 @@ const Ctx = createContext<StoreCtx>(null as any);
 export function AppStoreProvider({ children, seedFn }: { children: React.ReactNode; seedFn: () => db.DBData }) {
   const [data, setData] = useState<db.DBData>(() => {
     const loaded = db.load();
-    return loaded.settings ? loaded : seedFn();
+    return loaded.settings ? loaded : db.empty();
   });
   const [toasts, setToasts] = useState<Toast[]>([]);
 

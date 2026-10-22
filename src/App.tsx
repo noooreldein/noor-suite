@@ -18,6 +18,7 @@ import { ReportsPage } from './modules/reports/ReportsPage';
 import { CalendarPage } from './modules/calendar/CalendarPage';
 import { SettingsPage } from './modules/settings/SettingsPage';
 import { seed } from './seed/seed';
+import { Onboarding } from './components/system/Onboarding';
 import { ErrorBoundary } from './components/system/ErrorBoundary';
 
 function Toasts() {
@@ -46,6 +47,12 @@ const pages: Record<string, () => JSX.Element> = {
   settings: SettingsPage,
 };
 
+function Gate() {
+  const { data } = useStore();
+  if (!data.settings?.companyName) return <Onboarding />;
+  return <Shell />;
+}
+
 function Shell() {
   const [route, navigate] = useRoute();
   const title = useMemo(() => routeTitle(route), [route]);
@@ -69,7 +76,7 @@ export default function App() {
     <ErrorBoundary>
       <AppStoreProvider seedFn={seedFn}>
         <I18nProvider>
-          <Shell />
+          <Gate />
         </I18nProvider>
       </AppStoreProvider>
     </ErrorBoundary>

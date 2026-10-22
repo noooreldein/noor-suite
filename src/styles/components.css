@@ -86,3 +86,27 @@ label.field { font-size: 12px; font-weight: 600; color: var(--soft); display: bl
 .grid-2 { display: grid; grid-template-columns: 1.6fr 1fr; gap: 16px; }
 @media (max-width: 1000px) { .grid-2 { grid-template-columns: 1fr; } }
 @media print { .sidebar, .topbar, .toolbar { display: none !important; } }
+
+/* ===== Onboarding ===== */
+.onboarding { min-height: 100vh; display: flex; align-items: center; justify-content: center; background: linear-gradient(160deg, #f8fafc 0%, #eef2f7 100%); padding: 20px; }
+.onb-card { width: 100%; max-width: 440px; background: #fff; border: 1px solid var(--line); border-radius: 16px; padding: 34px 30px; box-shadow: 0 18px 45px rgba(15,23,42,.08); text-align: center; }
+.onb-badge { width: 52px; height: 52px; margin: 0 auto 14px; border-radius: 14px; background: var(--primary); color: #fff; font-size: 26px; font-weight: 800; display: flex; align-items: center; justify-content: center; }
+.onb-title { font-size: 20px; font-weight: 800; }
+.onb-sub { margin-top: 6px; font-size: 13px; color: var(--soft); }
+.onb-form { margin-top: 22px; text-align: start; display: flex; flex-direction: column; gap: 12px; }
+.onb-form label { font-size: 12px; font-weight: 600; color: var(--soft); }
+.onb-form input, .onb-form select { width: 100%; padding: 10px 12px; border: 1px solid var(--line); border-radius: 9px; font-size: 13.5px; font-family: inherit; outline: none; transition: .15s; }
+.onb-form input:focus, .onb-form select:focus { border-color: var(--primary); box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 14%, transparent); }
+.onb-row { display: flex; gap: 12px; }
+.onb-row > div { flex: 1; }
+.onb-cta { width: 100%; justify-content: center; margin-top: 22px; padding: 12px; font-size: 14px; }
+.onb-demo { margin-top: 10px; background: none; border: none; color: var(--soft); font-size: 12.5px; text-decoration: underline; cursor: pointer; font-family: inherit; }
+.onb-demo:hover { color: var(--primary); }
+.onb-note { margin-top: 16px; font-size: 11px; color: color-mix(in srgb, var(--soft) 70%, transparent); }
+
+/* ===== Empty states ===== */
+.empty-state { text-align: center; padding: 54px 20px; }
+.empty-state .es-icon { font-size: 40px; opacity: .8; }
+.empty-state h3 { margin-top: 12px; font-size: 15px; font-weight: 700; }
+.empty-state p { margin-top: 5px; font-size: 12.5px; color: var(--soft); }
+.empty-state .btn { margin-top: 16px; }

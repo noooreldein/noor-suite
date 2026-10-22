@@ -71,7 +71,7 @@ export function SettingsPage() {
             <div className="row">
               <Button onClick={() => { download(`noor-suite-backup-${new Date().toISOString().slice(0, 10)}.json`, exportAll(), 'application/json'); toast('تم تصدير النسخة ✓'); }}>⬇ تصدير</Button>
               <Button variant="outline" onClick={() => fileRef.current?.click()}>⬆ استيراد</Button>
-              <Button variant="danger" onClick={() => { reseed(); toast('تمت إعادة الضبط للبيانات التجريبية'); }}>إعادة ضبط</Button>
+              <Button variant="danger" onClick={() => { if (confirm('استعادة بيانات تجريبية؟ سيتم استبدال البيانات الحالية — صدّر نسخة أولاً إن أردت الاحتفاظ بها.')) { reseed(); toast('تم تحميل بيانات تجريبية'); } }}>استعادة بيانات تجريبية</Button>
             </div>
             <input ref={fileRef} type="file" accept=".json" hidden onChange={e => {
               const f = e.target.files?.[0];

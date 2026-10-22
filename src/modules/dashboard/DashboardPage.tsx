@@ -1,5 +1,6 @@
 /** Executive dashboard — KPIs + charts + activity widgets. */
 import { useMemo } from 'react';
+import { useRoute } from '../../router/router';
 import { useStore } from '../../store/AppStore';
 import { StatCard } from '../../components/ui/StatCard';
 import { BarChart } from '../../components/charts/BarChart';
@@ -30,6 +31,21 @@ export function DashboardPage() {
 
   const lowStock = data.products.filter(p => p.stock <= p.minStock);
   const openTasks = data.tasks.filter(t => t.stage !== 'done');
+  const [, navigate] = useRoute();
+  const isEmpty = !data.products.length && !data.invoices.length && !data.partners.length;
+
+  if (isEmpty) return (
+    <div className="card empty-state">
+      <div className="es-icon">🗂️</div>
+      <h3>نظامك جاهز — ابدأ أول خطوة</h3>
+      <p>أضف منتجاتك وعملاءك، واصدر أول فاتورة — كل التقارير هتتولد تلقائياً من بياناتك الفعلية.</p>
+      <div style={{ display: 'flex', gap: 10, justifyContent: 'center', flexWrap: 'wrap' }}>
+        <button className="btn btn-primary" onClick={() => navigate('inventory')}>إضافة منتجات</button>
+        <button className="btn" style={{ border: '1px solid var(--line)' }} onClick={() => navigate('partners')}>إضافة عملاء وموردين</button>
+        <button className="btn" style={{ border: '1px solid var(--line)' }} onClick={() => navigate('pos')}>تجربة نقطة البيع</button>
+      </div>
+    </div>
+  );
 
   return (
     <>

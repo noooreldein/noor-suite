@@ -1,7 +1,7 @@
 {
   "name": "noor-suite",
   "private": true,
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Noor Suite — نظام إدارة أعمال متكامل (كاشير، مخازن، فواتير، CRM، HR، مشاريع، محاسبة، تقارير)",
   "type": "module",
   "scripts": {
