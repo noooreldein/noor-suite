@@ -1,0 +1,31 @@
+/** Arabic dictionary. */
+export const ar = {
+  app_name: 'نور سويت',
+  app_sub: 'نظام إدارة الأعمال المتكامل',
+  save: 'حفظ',
+  cancel: 'إلغاء',
+  edit: 'تعديل',
+  delete: 'حذف',
+  add: 'إضافة',
+  search: 'بحث...',
+  confirm: 'تأكيد',
+  confirm_delete: 'هل أنت متأكد من الحذف؟',
+  saved: 'تم الحفظ ✓',
+  deleted: 'تم الحذف',
+  empty: 'لا توجد بيانات بعد',
+  today: 'اليوم',
+  logout: 'تسجيل الخروج',
+  dark_mode: 'الوضع الليلي',
+  language: 'English',
+  currency: 'ج.م',
+  total: 'الإجمالي',
+  qty: 'الكمية',
+  price: 'السعر',
+  stock: 'المخزون',
+  paid: 'مدفوعة',
+  unpaid: 'غير مدفوعة',
+  print: 'طباعة',
+  export_csv: 'تصدير CSV',
+} as const;
+
+export type Dict = { [K in keyof typeof ar]: string };

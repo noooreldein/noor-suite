@@ -1,0 +1,43 @@
+/* ===== Global reset & base ===== */
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+  font-family: 'IBM Plex Sans Arabic', system-ui, -apple-system, sans-serif;
+  background: var(--bg);
+  color: var(--ink);
+  font-size: 14px;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+}
+
+button { font-family: inherit; cursor: pointer; }
+
+input, select, textarea {
+  font-family: inherit;
+  font-size: 13.5px;
+  padding: 9px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--card);
+  color: var(--ink);
+  width: 100%;
+}
+input:focus, select:focus, textarea:focus { outline: 2px solid var(--primary-soft); border-color: var(--primary); }
+
+table { width: 100%; border-collapse: collapse; background: var(--card); }
+th { font-size: 11.5px; color: var(--soft); font-weight: 600; text-align: start; padding: 11px 14px; border-bottom: 1px solid var(--line); background: transparent; white-space: nowrap; }
+td { padding: 11px 14px; border-bottom: 1px solid var(--line); font-size: 13px; vertical-align: middle; }
+tbody tr:hover td { background: var(--primary-soft); }
+
+a { color: inherit; text-decoration: none; }
+.mono { font-family: var(--mono); }
+::selection { background: var(--primary); color: var(--primary-ink); }
+::-webkit-scrollbar { width: 9px; height: 9px; }
+::-webkit-scrollbar-track { background: var(--bg); }
+::-webkit-scrollbar-thumb { background: var(--line); border-radius: 5px; }
+
+.mt { margin-top: 16px; }
+.row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.grow { flex: 1; }
+
+@keyframes sk { from { background-position: 200% 0; } to { background-position: -200% 0; } }

@@ -1,0 +1,37 @@
+/* ===== Design tokens ===== */
+:root {
+  --bg: #f5f6fa;
+  --card: #ffffff;
+  --ink: #111827;
+  --soft: #6b7280;
+  --line: #e5e7eb;
+  --primary: #4f46e5;
+  --primary-ink: #ffffff;
+  --primary-soft: #eef2ff;
+  --green: #16a34a;
+  --green-soft: #e8f7ee;
+  --red: #dc2626;
+  --red-soft: #fdeaea;
+  --amber: #d97706;
+  --amber-soft: #fdf3e3;
+  --blue: #2563eb;
+  --blue-soft: #e8effd;
+  --shadow: 0 1px 3px rgba(17, 24, 39, 0.06);
+  --radius: 10px;
+  --sidebar: #111827;
+  --mono: 'JetBrains Mono', monospace;
+}
+[data-theme='dark'] {
+  --bg: #0f172a;
+  --card: #1e293b;
+  --ink: #e5e7eb;
+  --soft: #94a3b8;
+  --line: #334155;
+  --primary-soft: #312e81;
+  --green-soft: #14532d;
+  --red-soft: #7f1d1d;
+  --amber-soft: #78350f;
+  --blue-soft: #1e3a8a;
+  --shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
+  --sidebar: #0f172a;
+}
