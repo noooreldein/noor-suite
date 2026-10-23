@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { AppStoreProvider, useStore } from './store/AppStore';
 import { I18nProvider } from './i18n/I18n';
 import { useRoute, routeTitle } from './router/router';
@@ -20,6 +20,8 @@ import { SettingsPage } from './modules/settings/SettingsPage';
 import { seed } from './seed/seed';
 import { Onboarding } from './components/system/Onboarding';
 import { LockScreen } from './components/system/LockScreen';
+import { AuthScreen } from './components/system/AuthScreen';
+import * as backend from './lib/backend';
 import { ErrorBoundary } from './components/system/ErrorBoundary';
 
 function Toasts() {
@@ -49,8 +51,29 @@ const pages: Record<string, () => JSX.Element> = {
 };
 
 function Gate() {
-  const { data } = useStore();
+  const { data, ingest, enterCloud, enterLocal } = useStore();
   const [unlocked, setUnlocked] = useState(() => !data.settings?.passwordHash);
+  const [auth, setAuth] = useState<'checking' | 'out' | 'in'>('checking');
+
+  useEffect(() => {
+    backend.getSession().then(({ data: s }) => {
+      if (s.session) {
+        enterCloud();
+        backend.loadAll().then(remote => {
+          if (remote) {
+            const cloudEmpty = !remote.settings?.companyName;
+            if (cloudEmpty && data.settings?.companyName) {
+              backend.migrateLocal(data).then(() => ingest(remote)).catch(() => ingest(remote));
+              setAuth('in');
+            } else { ingest(remote); setAuth('in'); }
+          } else setAuth('in');
+        });
+      } else setAuth('out');
+    }).catch(() => setAuth('out'));
+  }, []); // eslint-disable-line
+
+  if (auth === 'checking') return null;
+  if (auth === 'out') return <AuthScreen onDone={() => location.reload()} />;
   if (!data.settings?.companyName) return <Onboarding />;
   if (data.settings?.passwordHash && !unlocked) return <LockScreen onUnlock={() => setUnlocked(true)} />;
   return <Shell />;

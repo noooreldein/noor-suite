@@ -1,14 +1,27 @@
 /** Settings — company info, backup & restore, about. */
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { sha256 } from '../../lib/hash';
+import * as backend from '../../lib/backend';
 import { Badge } from '../../components/ui/Badge';
 import { useStore } from '../../store/AppStore';
 import { Button } from '../../components/ui/Button';
 import { Tabs } from '../../components/ui/Tabs';
 import { download } from '../../lib/csv';
 
+function CloudStatus() {
+  const [email, setEmail] = useState<string | null>(null);
+  useEffect(() => { backend.getUser().then(u => setEmail(u?.email ?? null)); }, []);
+  if (!email) return <span style={{ fontSize: 12.5, color: 'var(--soft)' }}>بيانات محلية على الجهاز فقط — سجّل الدخول من شاشة البداية للمزامنة السحابية</span>;
+  return (
+    <>
+      <Badge tone="green">متصل: {email}</Badge>
+      <Button variant="outline" onClick={() => { backend.signOut().then(() => location.reload()); }}>تسجيل خروج</Button>
+    </>
+  );
+}
+
 export function SettingsPage() {
-  const { data, settings, setSettings, exportAll, importAll, reseed, toast } = useStore();
+  const { data, settings, setSettings, exportAll, importAll, reseed, toast, enterLocal } = useStore();
   const [pw, setPw] = useState('');
   const savePw = async () => {
     if (pw.trim().length < 4) return toast('كلمة المرور 4 أحرف على الأقل');
@@ -82,6 +95,12 @@ export function SettingsPage() {
               <Button onClick={() => { download(`noor-suite-backup-${new Date().toISOString().slice(0, 10)}.json`, exportAll(), 'application/json'); toast('تم تصدير النسخة ✓'); }}>⬇ تصدير</Button>
               <Button variant="outline" onClick={() => fileRef.current?.click()}>⬆ استيراد</Button>
               <div className="card" style={{ marginTop: 16 }}>
+              <div className="card-head"><h3>الحساب السحابي</h3></div>
+              <div className="card-body" style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+                <CloudStatus />
+              </div>
+            </div>
+            <div className="card" style={{ marginTop: 16 }}>
               <div className="card-head"><h3>قفل النظام</h3></div>
               <div className="card-body" style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
                 {settings?.passwordHash ? (

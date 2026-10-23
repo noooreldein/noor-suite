@@ -5,6 +5,7 @@
  */
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import * as db from '../lib/db';
+import * as backend from '../lib/backend';
 import { uid } from '../lib/id';
 import { Collection, Settings } from '../types/core';
 
@@ -20,6 +21,9 @@ interface StoreCtx {
   toasts: Toast[];
   toast: (msg: string, kind?: 'ok' | 'err') => void;
   reseed: () => void;
+  ingest: (remote: db.DBData) => void;
+  enterCloud: () => void;
+  enterLocal: () => void;
   exportAll: () => string;
   importAll: (json: string) => boolean;
 }
@@ -31,9 +35,10 @@ export function AppStoreProvider({ children, seedFn }: { children: React.ReactNo
     const loaded = db.load();
     return loaded.settings ? loaded : db.empty();
   });
+  const [cloud, setCloud] = useState(false);
   const [toasts, setToasts] = useState<Toast[]>([]);
 
-  useEffect(() => { db.save(data); }, [data]);
+  useEffect(() => { if (!cloud) db.save(data); }, [data, cloud]);
 
   // apply theme & direction
   useEffect(() => {
@@ -50,21 +55,42 @@ export function AppStoreProvider({ children, seedFn }: { children: React.ReactNo
 
   const add = useCallback((col: Collection, rec: any) => {
     const id = rec.id ?? uid(col.slice(0, 3));
-    commit(d => ({ ...d, [col]: [...(d as any)[col], { ...rec, id, createdAt: new Date().toISOString() }] }));
+    const full = { ...rec, id, createdAt: new Date().toISOString() };
+    commit(d => ({ ...d, [col]: [...(d as any)[col], full] }));
+    if (backend.getMode() === 'cloud') backend.upsert(col as any, full).catch(() => {});
     return id;
   }, [commit]);
 
   const update = useCallback((col: Collection, id: string, patch: any) => {
-    commit(d => ({ ...d, [col]: (d as any)[col].map((r: any) => r.id === id ? { ...r, ...patch, updatedAt: new Date().toISOString() } : r) }));
+    commit(d => {
+      const next = (d as any)[col].map((r: any) => {
+        if (r.id !== id) return r;
+        const merged = { ...r, ...patch, updatedAt: new Date().toISOString() };
+        if (backend.getMode() === 'cloud') backend.upsert(col as any, merged).catch(() => {});
+        return merged;
+      });
+      return { ...d, [col]: next };
+    });
   }, [commit]);
 
   const remove = useCallback((col: Collection, id: string) => {
     commit(d => ({ ...d, [col]: (d as any)[col].filter((r: any) => r.id !== id) }));
+    if (backend.getMode() === 'cloud') backend.remove(col as any, id).catch(() => {});
   }, [commit]);
 
   const setSettings = useCallback((patch: Partial<Settings>) => {
-    commit(d => ({ ...d, settings: { ...d.settings, ...patch } }));
+    commit(d => {
+      const merged = { ...d.settings, ...patch };
+      if (backend.getMode() === 'cloud') backend.saveSettings(merged).catch(() => {});
+      return { ...d, settings: merged };
+    });
   }, [commit]);
+
+  const ingest = useCallback((remote: db.DBData) => { setData(remote); }, []);
+
+  const enterCloud = useCallback(() => { backend.setMode('cloud'); setCloud(true); }, []);
+
+  const enterLocal = useCallback(() => { backend.setMode('local'); setCloud(false); }, []);
 
   const toast = useCallback((msg: string, kind: 'ok' | 'err' = 'ok') => {
     const id = uid('t');
@@ -85,8 +111,8 @@ export function AppStoreProvider({ children, seedFn }: { children: React.ReactNo
 
   const value = useMemo(() => ({
     data, settings: data.settings, setSettings, add, update, remove,
-    toasts, toast, reseed, exportAll, importAll,
-  }), [data, setSettings, add, update, remove, toasts, toast, reseed, exportAll, importAll]);
+    toasts, toast, reseed, exportAll, importAll, ingest, enterCloud, enterLocal,
+  }), [data, setSettings, add, update, remove, toasts, toast, reseed, exportAll, importAll, ingest, enterCloud, enterLocal]);
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
