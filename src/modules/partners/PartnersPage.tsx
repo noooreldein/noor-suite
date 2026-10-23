@@ -7,6 +7,7 @@ import { Tabs } from '../../components/ui/Tabs';
 import { SearchBox } from '../../components/ui/SearchBox';
 import { Table } from '../../components/ui/Table';
 import { PartnerFormModal } from './PartnerFormModal';
+import { Client360Modal } from './Client360Modal';
 
 export function PartnersPage() {
   const { data, remove, toast } = useStore();
@@ -14,6 +15,7 @@ export function PartnersPage() {
   const [q, setQ] = useState('');
   const [editing, setEditing] = useState<string | null>(null);
   const [confirmId, setConfirmId] = useState<string | null>(null);
+  const [profileId, setProfileId] = useState<string | null>(null);
 
   const rows = useMemo(() => data.partners.filter(p =>
     (tab === 'all' || p.type === tab) && (p.name.includes(q) || p.phone.includes(q))
@@ -39,12 +41,14 @@ export function PartnersPage() {
             <span key="e" style={{ color: 'var(--soft)' }}>{p.email ?? '—'}</span>,
             <span key="a" style={{ color: 'var(--soft)' }}>{p.address ?? '—'}</span>,
             <div key="x" className="row">
+              <Button size="sm" variant="outline" onClick={() => setProfileId(p.id)}>ملف 360</Button>
               <Button size="sm" variant="outline" onClick={() => setEditing(p.id)}>تعديل</Button>
               <Button size="sm" variant="danger" onClick={() => setConfirmId(p.id)}>حذف</Button>
             </div>,
           ]} />
       </div>
       {editing && <PartnerFormModal id={editing === 'new' ? null : editing} onClose={() => setEditing(null)} />}
+      {profileId && <Client360Modal id={profileId} onClose={() => setProfileId(null)} />}
       {confirmId && (
         <div className="overlay" onMouseDown={e => e.target === e.currentTarget && setConfirmId(null)}>
           <div className="modal" style={{ maxWidth: 420 }}>

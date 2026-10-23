@@ -51,6 +51,8 @@ export interface Lead extends BaseEntity {
   stage: LeadStage;
   value: number;
   notes?: string;
+  nextFollowUp?: string;
+  lastContact?: string;
 }
 
 /* ===== HR ===== */

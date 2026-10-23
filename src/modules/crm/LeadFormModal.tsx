@@ -8,7 +8,7 @@ export function LeadFormModal({ id, onClose }: { id: string | null; onClose: () 
   const l = id ? data.leads.find(x => x.id === id) : undefined;
   const [form, setForm] = useState({
     name: l?.name ?? '', company: l?.company ?? '', phone: l?.phone ?? '',
-    stage: l?.stage ?? 'new', value: l?.value ?? 0, notes: l?.notes ?? '',
+    stage: l?.stage ?? 'new', value: l?.value ?? 0, notes: l?.notes ?? '', nextFollowUp: l?.nextFollowUp ?? '',
   });
   const set = (k: string, v: any) => setForm(f => ({ ...f, [k]: v }));
 
@@ -27,12 +27,14 @@ export function LeadFormModal({ id, onClose }: { id: string | null; onClose: () 
           </select>
         </div>
         <div><label className="field">ملاحظات</label><input value={form.notes} onChange={e => set('notes', e.target.value)} /></div>
+        <div><label className="field">متابعة تالية (تاريخ)</label><input type="date" value={form.nextFollowUp} onChange={e => set('nextFollowUp', e.target.value)} /></div>
       </div>
       <div className="modal-actions">
         <Button variant="outline" onClick={onClose}>إلغاء</Button>
         <Button onClick={() => {
           if (!form.name.trim()) return toast('الاسم مطلوب', 'err');
-          id ? update('leads', id, form) : add('leads', form);
+          const payload = { ...form, nextFollowUp: form.nextFollowUp || undefined };
+          id ? update('leads', id, payload) : add('leads', payload);
           toast('تم الحفظ ✓'); onClose();
         }}>حفظ</Button>
       </div>

@@ -7,6 +7,11 @@ import { StatCard } from '../../components/ui/StatCard';
 import { num } from '../../lib/format';
 import { LeadFormModal } from './LeadFormModal';
 import { Lead } from '../../types/entities';
+import { useStore as _us } from '../../store/AppStore';
+
+const today = () => new Date().toISOString().slice(0, 10);
+const waLink = (phone: string, text: string) =>
+  `https://wa.me/${phone.replace(/[^0-9]/g, '')}?text=${encodeURIComponent(text)}`;
 
 const STAGES: { key: Lead['stage']; label: string; tone: 'gray' | 'blue' | 'amber' | 'green' | 'red' }[] = [
   { key: 'new', label: 'جديد', tone: 'gray' },
@@ -18,11 +23,17 @@ const STAGES: { key: Lead['stage']; label: string; tone: 'gray' | 'blue' | 'ambe
 
 export function CrmPage() {
   const { data, update, remove, toast } = useStore();
+  
   const [editing, setEditing] = useState<string | null>(null);
   const [confirmId, setConfirmId] = useState<string | null>(null);
 
   const pipelineValue = data.leads.filter(l => !['won', 'lost'].includes(l.stage)).reduce((s, l) => s + l.value, 0);
   const won = data.leads.filter(l => l.stage === 'won');
+  const lost = data.leads.filter(l => l.stage === 'lost');
+  const closed = won.length + lost.length;
+  const due = data.leads
+    .filter(l => l.nextFollowUp && l.nextFollowUp <= today() && !['won', 'lost'].includes(l.stage))
+    .sort((a, b) => (a.nextFollowUp! < b.nextFollowUp! ? -1 : 1));
 
   const move = (id: string, dir: 1 | -1) => {
     const lead = data.leads.find(l => l.id === id)!;
@@ -38,6 +49,28 @@ export function CrmPage() {
         <StatCard label="فرص مغلومة" value={won.length} tone="green" />
         <StatCard label="نسبة الإغلاق" value={`${data.leads.length ? Math.round(won.length / data.leads.length * 100) : 0}%`} />
       </div>
+
+      {due.length > 0 && (
+        <div className="card" style={{ marginBottom: 14, borderColor: 'var(--amber)' }}>
+          <div className="card-head"><h3>⏰ متابعات مستحقة ({due.length})</h3></div>
+          <div className="card-body" style={{ display: 'grid', gap: 8 }}>
+            {due.map(l => (
+              <div key={l.id} style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+                <b>{l.name}</b>
+                <span className="mono" style={{ color: 'var(--soft)' }}>{l.phone}</span>
+                <Badge tone="amber">{Math.max(0, Math.round((Date.now() - new Date(l.nextFollowUp!).getTime()) / 86400000))} يوم تأخير</Badge>
+                <span style={{ color: 'var(--soft)', fontSize: 12 }}>{l.company}</span>
+                <div className="grow" />
+                <a className="btn btn-sm" target="_blank" rel="noreferrer"
+                  href={waLink(l.phone, `مرحباً ${l.name}، معاك ${data.settings?.companyName ?? ''} — متابعة لفرصة التعاون الخاصة بيك 🙌`)}>
+                  واتساب
+                </a>
+                <Button size="sm" onClick={() => { update('leads', l.id, { lastContact: today(), nextFollowUp: undefined }); toast('تم تسجيل المتابعة ✓'); }}>تمت المتابعة</Button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       <div className="toolbar">
         <span className="badge b-gray">اسحب الفرصة بمراحل الخط من الأزرار</span>
@@ -85,6 +118,28 @@ export function CrmPage() {
           </div>
         </div>
       )}
+    
+      <div className="card" style={{ marginTop: 14 }}>
+        <div className="card-head"><h3>مسار تحويل العملاء</h3>
+          <Badge tone="green">معدل الإغلاق: {closed ? Math.round(won.length / closed * 100) : 0}%</Badge>
+        </div>
+        <div className="card-body" style={{ display: 'grid', gap: 6 }}>
+          {STAGES.map(s => {
+            const n = data.leads.filter(l => l.stage === s.key).length;
+            const pct = data.leads.length ? Math.round(n / data.leads.length * 100) : 0;
+            return (
+              <div key={s.key} style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+                <span style={{ width: 90, fontSize: 12.5 }}>{s.label}</span>
+                <div style={{ flex: 1, background: 'var(--bg)', borderRadius: 6, height: 18 }}>
+                  <div style={{ width: pct + '%', height: '100%', borderRadius: 6,
+                    background: s.tone === 'green' ? 'var(--green)' : s.tone === 'red' ? 'var(--red)' : s.tone === 'amber' ? 'var(--amber)' : s.tone === 'blue' ? 'var(--blue)' : 'var(--soft)' }} />
+                </div>
+                <b style={{ width: 70, textAlign: 'left' }}>{n} ({pct}%)</b>
+              </div>
+            );
+          })}
+        </div>
+      </div>
     </>
   );
 }
