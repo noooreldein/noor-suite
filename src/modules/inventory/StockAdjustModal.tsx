@@ -10,6 +10,7 @@ export function StockAdjustModal({ id, onClose }: { id: string; onClose: () => v
 
   const apply = () => {
     update('products', id, { stock: p.stock + qty });
+    add('stockMoves', { type: 'adjust', productId: id, name: p.name, delta: qty, ref: id });
     if (p.stock + qty <= p.minStock) {
       add('notifications', { title: 'مخزون منخفض', body: `${p.name} وصل لحد إعادة الطلب`, read: false });
     }

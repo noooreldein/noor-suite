@@ -30,7 +30,7 @@ export function InvoiceFormModal({ kind, onClose }: { kind: 'sale' | 'purchase';
   const submit = () => {
     if (!resolved.length) return toast('أضف صنفاً واحداً على الأقل', 'err');
     if (!partnerId) return toast('اختر الجهة', 'err');
-    add('invoices', {
+    const invId = add('invoices', {
       kind, partnerId, date, status,
       items: resolved.map(r => ({ productId: r.productId, name: r.name, qty: r.qty, price: r.price })),
       total,
@@ -39,11 +39,13 @@ export function InvoiceFormModal({ kind, onClose }: { kind: 'sale' | 'purchase';
       resolved.forEach(r => {
         const p = data.products.find((x: any) => x.id === r.productId)!;
         update('products', r.productId, { stock: Math.max(0, p.stock - r.qty) });
+        add('stockMoves', { type: 'sale', productId: r.productId, name: r.name, delta: -r.qty, ref: invId });
       });
     } else {
       resolved.forEach(r => {
         const p = data.products.find((x: any) => x.id === r.productId)!;
         update('products', r.productId, { stock: p.stock + r.qty });
+        add('stockMoves', { type: 'purchase', productId: r.productId, name: r.name, delta: r.qty, ref: invId });
       });
     }
     add('ledger', {

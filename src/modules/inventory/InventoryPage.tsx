@@ -11,6 +11,9 @@ import { download, toCSV } from '../../lib/csv';
 import { ProductFormModal } from './ProductFormModal';
 import { StockAdjustModal } from './StockAdjustModal';
 import { today } from '../../lib/dates';
+import { Modal } from '../../components/ui/Modal';
+
+const MOVE_LABELS: Record<string, string> = { sale: 'بيع', return: 'مرتجع', purchase: 'شراء', adjust: 'تسوية', receive: 'استلام' };
 
 export function InventoryPage() {
   const { data, remove, toast, update } = useStore();
@@ -19,6 +22,7 @@ export function InventoryPage() {
   const [editing, setEditing] = useState<string | null>(null);
   const [adjusting, setAdjusting] = useState<string | null>(null);
   const [confirmId, setConfirmId] = useState<string | null>(null);
+  const [showMoves, setShowMoves] = useState(false);
 
   const rows = useMemo(() => data.products.filter(p =>
     (p.name.includes(q) || p.sku.toLowerCase().includes(q.toLowerCase()) || p.category.includes(q)) &&
@@ -26,6 +30,7 @@ export function InventoryPage() {
   ), [data.products, q, lowOnly]);
 
   const stockValue = data.products.reduce((s, p) => s + p.stock * p.cost, 0);
+  const moves = useMemo(() => [...data.stockMoves].sort((a: any, b: any) => (a.createdAt < b.createdAt ? 1 : -1)).slice(0, 300), [data.stockMoves]);
   const low = data.products.filter(p => p.stock <= p.minStock);
 
   return (
@@ -40,6 +45,7 @@ export function InventoryPage() {
         <SearchBox value={q} onChange={setQ} placeholder="بحث بالاسم / الكود / التصنيف..." />
         <button className={`chip ${lowOnly ? 'on' : ''}`} onClick={() => setLowOnly(v => !v)}>⚠ يحتاج تعويض</button>
         <Button variant="outline" onClick={() => download(`inventory-${today()}.csv`, toCSV(data.products))}>تصدير CSV</Button>
+        <Button variant="outline" onClick={() => setShowMoves(true)}>سجل حركة المخزون</Button>
         <Button onClick={() => setEditing('new')}>+ منتج جديد</Button>
       </div>
 
@@ -63,6 +69,20 @@ export function InventoryPage() {
           ]} />
       </div>
 
+      {showMoves && (
+        <Modal title={`سجل حركة المخزون (${data.stockMoves.length})`} onClose={() => setShowMoves(false)} width={720}>
+          <div style={{ maxHeight: 460, overflow: 'auto' }}>
+            <Table cols={['التاريخ', 'النوع', 'الصنف', 'الكمية', 'مرجع']} rows={moves}
+              render={(m: any) => [
+                <span key="d" className="mono" style={{ fontSize: 12 }}>{new Date(m.createdAt).toLocaleString('ar-EG', { dateStyle: 'short', timeStyle: 'short' })}</span>,
+                <Badge key="t" tone={m.type === 'sale' ? 'red' : m.type === 'return' ? 'amber' : 'green'}>{MOVE_LABELS[m.type] ?? m.type}</Badge>,
+                <b key="n">{m.name}</b>,
+                <b key="q" style={{ color: m.delta < 0 ? 'var(--danger, #dc2626)' : 'green' }}>{m.delta > 0 ? '+' : ''}{m.delta}</b>,
+                <span key="r" className="mono" style={{ fontSize: 11.5, color: 'var(--soft)' }}>{m.ref ? m.ref.slice(0, 8) : '—'}</span>,
+              ]} />
+          </div>
+        </Modal>
+      )}
       {editing && <ProductFormModal id={editing === 'new' ? null : editing} onClose={() => setEditing(null)} />}
       {adjusting && <StockAdjustModal id={adjusting} onClose={() => setAdjusting(null)} />}
       {confirmId && (

@@ -18,7 +18,9 @@ export type Collection =
   | 'tasks'
   | 'ledger'
   | 'purchaseOrders'
-  | 'notifications';
+  | 'notifications'
+  | 'stockMoves'
+  | 'shifts';
 
 export interface Settings {
   companyName: string;
