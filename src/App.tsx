@@ -51,29 +51,37 @@ const pages: Record<string, () => JSX.Element> = {
 };
 
 function Gate() {
-  const { data, ingest, enterCloud, enterLocal } = useStore();
+  const { data, ingest, enterCloud, enterLocal, toast } = useStore();
   const [unlocked, setUnlocked] = useState(() => !data.settings?.passwordHash);
   const [auth, setAuth] = useState<'checking' | 'out' | 'in'>('checking');
 
   useEffect(() => {
-    backend.getSession().then(({ data: s }) => {
+    (async () => {
+    const { data: s } = await backend.getSession();
       if (s.session) {
+        localStorage.removeItem('ns_guest');
         enterCloud();
-        backend.loadAll().then(remote => {
+        try {
+          const remote = await backend.loadAll();
           if (remote) {
             const cloudEmpty = !remote.settings?.companyName;
             if (cloudEmpty && data.settings?.companyName) {
-              backend.migrateLocal(data).then(() => ingest(remote)).catch(() => ingest(remote));
-              setAuth('in');
-            } else { ingest(remote); setAuth('in'); }
-          } else setAuth('in');
-        });
-      } else setAuth('out');
-    }).catch(() => setAuth('out'));
+              const rep = await backend.migrateLocal(data);
+              const fresh = await backend.loadAll();
+              ingest(backend.mergeLocal(data, fresh ?? remote));
+              if (rep.failed > 0) toast(`ترحيل البيانات: نجح ${rep.ok} — فشل ${rep.failed} (سيُعاد تلقائيًا)`, 'err');
+              else toast(`تم ترحيل ${rep.ok} سجل إلى حسابك السحابي ✓`);
+            } else ingest(remote);
+          }
+        } catch { toast('تعذر تحميل البيانات السحابية — حاول التحديث', 'err'); }
+        setAuth('in');
+      } else if (localStorage.getItem('ns_guest') === '1') { enterLocal(); setAuth('in'); }
+      else setAuth('out');
+    })().catch(() => setAuth('out'));
   }, []); // eslint-disable-line
 
   if (auth === 'checking') return null;
-  if (auth === 'out') return <AuthScreen onDone={() => location.reload()} />;
+  if (auth === 'out') return <AuthScreen onDone={() => location.reload()} onGuest={() => { localStorage.setItem('ns_guest', '1'); enterLocal(); setAuth('in'); }} />;
   if (!data.settings?.companyName) return <Onboarding />;
   if (data.settings?.passwordHash && !unlocked) return <LockScreen onUnlock={() => setUnlocked(true)} />;
   return <Shell />;

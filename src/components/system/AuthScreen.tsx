@@ -1,7 +1,7 @@
 /** Cloud auth screen — login / signup / guest mode. */
 import { useState } from 'react';
 
-export function AuthScreen({ onDone }: { onDone: () => void }) {
+export function AuthScreen({ onDone, onGuest }: { onDone: () => void; onGuest: () => void }) {
   const [tab, setTab] = useState<'in' | 'up'>('in');
   const [email, setEmail] = useState('');
   const [pw, setPw] = useState('');
@@ -40,7 +40,7 @@ export function AuthScreen({ onDone }: { onDone: () => void }) {
         <button className="btn btn-primary onb-cta" disabled={busy || !email || pw.length < 6} onClick={submit}>
           {busy ? 'لحظة…' : tab === 'in' ? 'تسجيل الدخول' : 'إنشاء الحساب'}
         </button>
-        <button className="onb-demo" disabled={busy} onClick={onDone}>وضع الزائر — بيانات محلية على الجهاز فقط</button>
+        <button className="onb-demo" disabled={busy} onClick={onGuest}>وضع الزائر — بيانات محلية على الجهاز فقط</button>
         <p className="onb-note">حساب جديد؟ بياناتك المحلية الحالية تترفع تلقائياً لحسابك عند أول دخول</p>
       </div>
     </div>

@@ -57,33 +57,36 @@ export function AppStoreProvider({ children, seedFn }: { children: React.ReactNo
     const id = rec.id ?? uid(col.slice(0, 3));
     const full = { ...rec, id, createdAt: new Date().toISOString() };
     commit(d => ({ ...d, [col]: [...(d as any)[col], full] }));
-    if (backend.getMode() === 'cloud') backend.upsert(col as any, full).catch(() => {});
+    if (backend.getMode() === 'cloud')
+      backend.upsert(col as any, full).then(ok => { if (!ok) toast('تعذر الحفظ السحابي — سيُعاد تلقائيًا عند الاتصال', 'err'); });
     return id;
   }, [commit]);
 
   const update = useCallback((col: Collection, id: string, patch: any) => {
+    let merged: any;
     commit(d => {
       const next = (d as any)[col].map((r: any) => {
         if (r.id !== id) return r;
-        const merged = { ...r, ...patch, updatedAt: new Date().toISOString() };
-        if (backend.getMode() === 'cloud') backend.upsert(col as any, merged).catch(() => {});
+        merged = { ...r, ...patch, updatedAt: new Date().toISOString() };
         return merged;
       });
       return { ...d, [col]: next };
     });
+    if (backend.getMode() === 'cloud' && merged)
+      backend.upsert(col as any, merged).then(ok => { if (!ok) toast('تعذر الحفظ السحابي — سيُعاد تلقائيًا عند الاتصال', 'err'); });
   }, [commit]);
 
   const remove = useCallback((col: Collection, id: string) => {
     commit(d => ({ ...d, [col]: (d as any)[col].filter((r: any) => r.id !== id) }));
-    if (backend.getMode() === 'cloud') backend.remove(col as any, id).catch(() => {});
+    if (backend.getMode() === 'cloud')
+      backend.remove(col as any, id).then(ok => { if (!ok) toast('تعذر الحذف السحابي — سيُعاد تلقائيًا عند الاتصال', 'err'); });
   }, [commit]);
 
   const setSettings = useCallback((patch: Partial<Settings>) => {
-    commit(d => {
-      const merged = { ...d.settings, ...patch };
-      if (backend.getMode() === 'cloud') backend.saveSettings(merged).catch(() => {});
-      return { ...d, settings: merged };
-    });
+    let merged: any;
+    commit(d => { merged = { ...d.settings, ...patch }; return { ...d, settings: merged }; });
+    if (backend.getMode() === 'cloud' && merged)
+      backend.saveSettings(merged).then(ok => { if (!ok) toast('تعذر حفظ الإعدادات سحابيًا — سيُعاد تلقائيًا', 'err'); });
   }, [commit]);
 
   const ingest = useCallback((remote: db.DBData) => { setData(remote); }, []);

@@ -40,7 +40,8 @@
 src/
 ├── components/     # نظام UI مصمم يدوياً + رسوم SVG بلا مكتبات
 ├── modules/        # 13 موديول أعمال منفصل
-├── store/          # طبقة حالة مركزية + محرك بيانات localStorage
+├── store/          # طبقة حالة مركزية + write-through فوري للسحابة
+├── lib/backend.ts  # ربط Supabase: مصادقة، قراءة، كتابة موثقة + طابور إعادة محاولة
 ├── lib/            # أدوات مالية/تواريخ/CSV/طباعة/تحقق (مختبرة بـ Vitest)
 ├── i18n/           # عربي/إنجليزي مع RTL/LTR تلقائي
 ├── hooks/          # useDebounce, useLocalStorage, useKeyboard, useMediaQuery
