@@ -17,6 +17,7 @@ export type Collection =
   | 'attendance'
   | 'tasks'
   | 'ledger'
+  | 'purchaseOrders'
   | 'notifications';
 
 export interface Settings {

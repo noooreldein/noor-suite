@@ -92,3 +92,22 @@ export interface LedgerEntry extends BaseEntity {
   credit: number;
   note: string;
 }
+
+/* ===== Procurement ===== */
+export type POStatus = 'draft' | 'ordered' | 'received' | 'cancelled';
+export interface PurchaseOrderItem {
+  productId: string;
+  name: string;
+  qty: number;
+  cost: number;
+}
+export interface PurchaseOrder extends BaseEntity {
+  number: string;
+  supplierId: string;
+  date: string;
+  expectedDate: string;
+  status: POStatus;
+  items: PurchaseOrderItem[];
+  total: number;
+  notes?: string;
+}

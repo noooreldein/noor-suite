@@ -8,6 +8,7 @@ import { NotificationCenter } from './modules/notifications/NotificationCenter';
 import { DashboardPage } from './modules/dashboard/DashboardPage';
 import { PosPage } from './modules/pos/PosPage';
 import { SalesPage } from './modules/sales/SalesPage';
+import { PurchaseOrdersPage } from './modules/purchases/PurchaseOrdersPage';
 import { InventoryPage } from './modules/inventory/InventoryPage';
 import { PartnersPage } from './modules/partners/PartnersPage';
 import { CrmPage } from './modules/crm/CrmPage';
@@ -38,6 +39,7 @@ const pages: Record<string, () => JSX.Element> = {
   dashboard: DashboardPage,
   pos: PosPage,
   sales: () => <SalesPage kind="sale" />,
+  purchaseOrders: PurchaseOrdersPage,
   purchases: () => <SalesPage kind="purchase" />,
   inventory: InventoryPage,
   partners: PartnersPage,

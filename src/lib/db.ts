@@ -14,6 +14,7 @@ export interface DBData {
   attendance: any[];
   tasks: any[];
   ledger: any[];
+  purchaseOrders: any[];
   notifications: any[];
   settings: any;
   meta: { version: number; seededAt?: string };
@@ -51,7 +52,7 @@ export function importJSON(text: string): DBData | null {
 export function empty(): DBData {
   return {
     products: [], partners: [], invoices: [], leads: [], employees: [],
-    attendance: [], tasks: [], ledger: [], notifications: [],
+    attendance: [], tasks: [], ledger: [], purchaseOrders: [], notifications: [],
     settings: null,
     meta: { version: 1 },
   };

@@ -6,7 +6,7 @@ import { useT } from '../../i18n/I18n';
 interface Props { route: RoutePath; onNavigate: (p: RoutePath) => void; }
 
 const icons: Record<string, string> = {
-  dashboard: '◧', pos: '▣', sales: '▤', purchases: '▦', inventory: '❋',
+  dashboard: '◧', pos: '▣', sales: '▤', purchases: '▦', purchaseOrders: '⧉', inventory: '❋',
   partners: '☺', crm: '◈', hr: '✚', projects: '◫', accounting: '₪',
   reports: '▤▤', calendar: '▦▦', settings: '⚙',
 };
@@ -14,7 +14,7 @@ const icons: Record<string, string> = {
 const groups: { label: string; items: RoutePath[] }[] = [
   { label: 'الرئيسية', items: ['dashboard', 'pos'] },
   { label: 'المبيعات', items: ['sales', 'crm', 'partners'] },
-  { label: 'المخازن', items: ['inventory', 'purchases'] },
+  { label: 'المخازن', items: ['inventory', 'purchaseOrders', 'purchases'] },
   { label: 'الإدارة', items: ['hr', 'projects', 'accounting'] },
   { label: 'التحليلات', items: ['reports', 'calendar', 'settings'] },
 ];

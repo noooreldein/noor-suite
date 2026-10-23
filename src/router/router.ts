@@ -5,6 +5,7 @@ export const routes = [
   { path: 'dashboard', title: 'لوحة التحكم' },
   { path: 'pos', title: 'نقطة البيع' },
   { path: 'sales', title: 'فواتير المبيعات' },
+  { path: 'purchaseOrders', title: 'طلبات الشراء' },
   { path: 'purchases', title: 'فواتير المشتريات' },
   { path: 'inventory', title: 'المخازن' },
   { path: 'partners', title: 'العملاء والموردون' },
