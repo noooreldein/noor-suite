@@ -7,6 +7,8 @@ import { BarChart } from '../../components/charts/BarChart';
 import { DonutChart } from '../../components/charts/DonutChart';
 import { Badge } from '../../components/ui/Badge';
 import { num } from '../../lib/format';
+import { shortId } from '../../lib/id';
+import { partnerName } from '../sales/SalesPage';
 import { lastMonths, monthKey, monthName, fmtDate } from '../../lib/dates';
 
 export function DashboardPage() {
@@ -31,6 +33,7 @@ export function DashboardPage() {
 
   const lowStock = data.products.filter(p => p.stock <= p.minStock);
   const openTasks = data.tasks.filter(t => t.stage !== 'done');
+  const overdue = sales.filter(i => i.status === 'unpaid' && (Date.now() - new Date(i.date).getTime()) > 14 * 864e5);
   const [, navigate] = useRoute();
   const isEmpty = !data.products.length && !data.invoices.length && !data.partners.length;
 
@@ -66,6 +69,24 @@ export function DashboardPage() {
           <div className="card-body"><DonutChart data={byCategory} /></div>
         </div>
       </div>
+
+      {overdue.length > 0 && (
+        <div className="card" style={{ marginTop: 16, border: '1px solid #fca5a5', background: '#fef2f2' }}>
+          <div className="card-head"><h3 style={{ color: '#b91c1c' }}>فواتير متأخرة عن السداد (أكثر من ١٤ يوم)</h3><Badge tone="red">{overdue.length}</Badge></div>
+          <div className="card-body">
+            {overdue.map(i => (
+              <div key={i.id} className="row" style={{ justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid #fecaca' }}>
+                <span>#{shortId(i.id)} — {partnerName(data, i.partnerId)}</span>
+                <span style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                  <b>{num(i.total)}</b>
+                  <Badge tone="red">{Math.floor((Date.now() - new Date(i.date).getTime()) / 864e5)} يوم</Badge>
+                </span>
+              </div>
+            ))}
+            <button className="btn" style={{ marginTop: 12, border: '1px solid #fca5a5' }} onClick={() => navigate('sales')}>مراجعة فواتير المبيعات</button>
+          </div>
+        </div>
+      )}
 
       <div className="grid-2 mt">
         <div className="card">
