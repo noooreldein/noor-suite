@@ -5,6 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="description" content="نور سويت — نظام إدارة أعمال متكامل: كاشير، مخازن، فواتير، عملاء، موظفين، مشاريع، محاسبة وتقارير" />
   <title>نور سويت — نظام إدارة الأعمال المتكامل</title>
+  <link rel="manifest" href="/noor-suite/manifest.webmanifest">
+  <meta name="theme-color" content="#4f46e5">
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='20' fill='%234f46e5'/><text x='50' y='74' font-size='58' font-family='monospace' font-weight='bold' fill='white' text-anchor='middle'>N</text></svg>" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -13,5 +15,10 @@
 <body>
   <div id="root"></div>
   <script type="module" src="/src/main.tsx"></script>
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => navigator.serviceWorker.register('/noor-suite/sw.js').catch(() => {}));
+    }
+  </script>
 </body>
 </html>

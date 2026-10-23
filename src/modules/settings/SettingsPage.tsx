@@ -132,7 +132,7 @@ export function SettingsPage() {
       {tab === 'about' && (
         <div className="card" style={{ maxWidth: 560 }}>
           <div className="card-body">
-            <h3 style={{ fontSize: 16 }}>نور سويت v2.4.0</h3>
+            <h3 style={{ fontSize: 16 }}>نور سويت v2.5.0</h3>
             <p style={{ color: 'var(--soft)', margin: '6px 0 16px' }}>نظام إدارة أعمال متكامل مبني بـ React + TypeScript بدون أي مكتبات إضافية.</p>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
               {counts.map(([label, count]) => (
