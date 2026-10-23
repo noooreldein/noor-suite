@@ -1,5 +1,7 @@
 /** Settings — company info, backup & restore, about. */
 import { useRef, useState } from 'react';
+import { sha256 } from '../../lib/hash';
+import { Badge } from '../../components/ui/Badge';
 import { useStore } from '../../store/AppStore';
 import { Button } from '../../components/ui/Button';
 import { Tabs } from '../../components/ui/Tabs';
@@ -7,6 +9,14 @@ import { download } from '../../lib/csv';
 
 export function SettingsPage() {
   const { data, settings, setSettings, exportAll, importAll, reseed, toast } = useStore();
+  const [pw, setPw] = useState('');
+  const savePw = async () => {
+    if (pw.trim().length < 4) return toast('كلمة المرور 4 أحرف على الأقل');
+    setSettings({ passwordHash: await sha256(pw.trim()) } as any);
+    setPw('');
+    toast('تم تعيين كلمة المرور');
+  };
+  const clearPw = () => { setSettings({ passwordHash: undefined } as any); toast('تم إلغاء قفل النظام'); };
   const [tab, setTab] = useState('company');
   const fileRef = useRef<HTMLInputElement>(null);
   const [form, setForm] = useState(settings);
@@ -71,7 +81,20 @@ export function SettingsPage() {
             <div className="row">
               <Button onClick={() => { download(`noor-suite-backup-${new Date().toISOString().slice(0, 10)}.json`, exportAll(), 'application/json'); toast('تم تصدير النسخة ✓'); }}>⬇ تصدير</Button>
               <Button variant="outline" onClick={() => fileRef.current?.click()}>⬆ استيراد</Button>
-              <Button variant="danger" onClick={() => { if (confirm('استعادة بيانات تجريبية؟ سيتم استبدال البيانات الحالية — صدّر نسخة أولاً إن أردت الاحتفاظ بها.')) { reseed(); toast('تم تحميل بيانات تجريبية'); } }}>استعادة بيانات تجريبية</Button>
+              <div className="card" style={{ marginTop: 16 }}>
+              <div className="card-head"><h3>قفل النظام</h3></div>
+              <div className="card-body" style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+                {settings?.passwordHash ? (
+                  <>
+                    <Badge tone="green">مقفلة بكلمة مرور</Badge>
+                    <Button variant="outline" onClick={clearPw}>إلغاء القفل</Button>
+                  </>
+                ) : <span style={{ fontSize: 12.5, color: 'var(--soft)' }}>النظام مفتوح — عيّن كلمة مرور لطلبها عند كل تشغيل</span>}
+                <input type="password" value={pw} onChange={e => setPw(e.target.value)} placeholder="كلمة مرور جديدة" style={{ padding: '8px 10px', border: '1px solid var(--line)', borderRadius: 8 }} />
+                <Button onClick={savePw}>{settings?.passwordHash ? 'تغيير' : 'تعيين'}</Button>
+              </div>
+            </div>
+            <Button variant="danger" onClick={() => { if (confirm('استعادة بيانات تجريبية؟ سيتم استبدال البيانات الحالية — صدّر نسخة أولاً إن أردت الاحتفاظ بها.')) { reseed(); toast('تم تحميل بيانات تجريبية'); } }}>استعادة بيانات تجريبية</Button>
             </div>
             <input ref={fileRef} type="file" accept=".json" hidden onChange={e => {
               const f = e.target.files?.[0];

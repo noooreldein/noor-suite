@@ -25,6 +25,7 @@ export interface Settings {
   vatRate: number;
   lang: 'ar' | 'en';
   theme: 'light' | 'dark';
+  passwordHash?: string;
 }
 
 export interface Notification extends BaseEntity {

@@ -19,6 +19,7 @@ import { CalendarPage } from './modules/calendar/CalendarPage';
 import { SettingsPage } from './modules/settings/SettingsPage';
 import { seed } from './seed/seed';
 import { Onboarding } from './components/system/Onboarding';
+import { LockScreen } from './components/system/LockScreen';
 import { ErrorBoundary } from './components/system/ErrorBoundary';
 
 function Toasts() {
@@ -49,7 +50,9 @@ const pages: Record<string, () => JSX.Element> = {
 
 function Gate() {
   const { data } = useStore();
+  const [unlocked, setUnlocked] = useState(() => !data.settings?.passwordHash);
   if (!data.settings?.companyName) return <Onboarding />;
+  if (data.settings?.passwordHash && !unlocked) return <LockScreen onUnlock={() => setUnlocked(true)} />;
   return <Shell />;
 }
 

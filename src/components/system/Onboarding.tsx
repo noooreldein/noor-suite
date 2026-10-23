@@ -1,5 +1,6 @@
 /** First-run setup — choose a clean start or demo data. */
 import { useState } from 'react';
+import { sha256 } from '../../lib/hash';
 import { useStore } from '../../store/AppStore';
 
 export function Onboarding() {
@@ -9,13 +10,16 @@ export function Onboarding() {
   const [vat, setVat] = useState(14);
   const [lang, setLang] = useState<'ar' | 'en'>('ar');
   const [busy, setBusy] = useState(false);
+  const [pw, setPw] = useState('');
 
-  const finish = (demo: boolean) => {
+  const finish = async (demo: boolean) => {
     setBusy(true);
     if (demo) {
       reseed();
     } else {
-      setSettings({ companyName: name.trim(), currency: currency.trim() || 'ج.م', vatRate: vat, lang, theme: 'light' } as any);
+      const patch: any = { companyName: name.trim(), currency: currency.trim() || 'ج.م', vatRate: vat, lang, theme: 'light' };
+      if (pw.trim()) patch.passwordHash = await sha256(pw.trim());
+      setSettings(patch);
     }
     setBusy(false);
   };
@@ -49,6 +53,10 @@ export function Onboarding() {
                 <option value="ar">العربية</option>
                 <option value="en">English</option>
               </select>
+            </div>
+            <div>
+              <label>{lang === 'ar' ? 'كلمة مرور (اختياري)' : 'Password (optional)'}</label>
+              <input type="password" value={pw} onChange={e => setPw(e.target.value)} placeholder={lang === 'ar' ? 'لقفل النظام عند التشغيل' : 'Locks the app on launch'} />
             </div>
           </div>
         </div>
