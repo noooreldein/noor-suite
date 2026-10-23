@@ -14,6 +14,7 @@ export const routes = [
   { path: 'projects', title: 'المشاريع' },
   { path: 'accounting', title: 'المحاسبة' },
   { path: 'reports', title: 'التقارير' },
+  { path: 'bi', title: 'الذكاء والتوقعات' },
   { path: 'calendar', title: 'التقويم' },
   { path: 'settings', title: 'الإعدادات' },
 ] as const;

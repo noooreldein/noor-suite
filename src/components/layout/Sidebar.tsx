@@ -8,7 +8,7 @@ interface Props { route: RoutePath; onNavigate: (p: RoutePath) => void; }
 const icons: Record<string, string> = {
   dashboard: '◧', pos: '▣', sales: '▤', purchases: '▦', purchaseOrders: '⧉', inventory: '❋',
   partners: '☺', crm: '◈', hr: '✚', projects: '◫', accounting: '₪',
-  reports: '▤▤', calendar: '▦▦', settings: '⚙',
+  reports: '▤▤', bi: '⌁', calendar: '▦▦', settings: '⚙',
 };
 
 const groups: { label: string; items: RoutePath[] }[] = [
@@ -16,7 +16,7 @@ const groups: { label: string; items: RoutePath[] }[] = [
   { label: 'المبيعات', items: ['sales', 'crm', 'partners'] },
   { label: 'المخازن', items: ['inventory', 'purchaseOrders', 'purchases'] },
   { label: 'الإدارة', items: ['hr', 'projects', 'accounting'] },
-  { label: 'التحليلات', items: ['reports', 'calendar', 'settings'] },
+  { label: 'التحليلات', items: ['reports', 'bi', 'calendar', 'settings'] },
 ];
 
 export function Sidebar({ route, onNavigate }: Props) {

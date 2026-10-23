@@ -15,6 +15,7 @@ import { CrmPage } from './modules/crm/CrmPage';
 import { HrPage } from './modules/hr/HrPage';
 import { ProjectsPage } from './modules/projects/ProjectsPage';
 import { AccountingPage } from './modules/accounting/AccountingPage';
+import { BiPage } from './modules/bi/BiPage';
 import { ReportsPage } from './modules/reports/ReportsPage';
 import { CalendarPage } from './modules/calendar/CalendarPage';
 import { SettingsPage } from './modules/settings/SettingsPage';
@@ -48,6 +49,7 @@ const pages: Record<string, () => JSX.Element> = {
   projects: ProjectsPage,
   accounting: AccountingPage,
   reports: ReportsPage,
+  bi: BiPage,
   calendar: CalendarPage,
   settings: SettingsPage,
 };
