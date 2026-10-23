@@ -8,10 +8,10 @@ import { Table } from '../../components/ui/Table';
 import { Tabs } from '../../components/ui/Tabs';
 import { StatCard } from '../../components/ui/StatCard';
 import { num } from '../../lib/format';
-import { fmtDate } from '../../lib/dates';
 import { shortId } from '../../lib/id';
 import { download, toCSV } from '../../lib/csv';
 import { printHTML } from '../../lib/print';
+import { fmtDate } from '../../lib/dates';
 import { InvoiceFormModal } from './InvoiceFormModal';
 
 export function SalesPage({ kind }: { kind: 'sale' | 'purchase' }) {
@@ -29,6 +29,30 @@ export function SalesPage({ kind }: { kind: 'sale' | 'purchase' }) {
 
   const sum = all.reduce((s, i) => s + i.total, 0);
   const unpaid = all.filter(i => i.status === 'unpaid');
+
+  const doShare = (id: string) => {
+    const inv = data.invoices.find(i => i.id === id)!;
+    const st = data.settings;
+    const p = data.partners.find(x => x.id === inv.partnerId);
+    const sub = inv.items.reduce((s: number, it: any) => s + it.qty * it.price, 0);
+    const vat = Math.round(sub * (st?.vatRate ?? 0)) / 100;
+    const lines = [
+      `*${st?.companyName ?? ''}*`,
+      `${kind === 'sale' ? 'فاتورة مبيعات' : 'فاتورة مشتريات'} #${shortId(inv.id)} — ${fmtDate(inv.date)}`,
+      `${kind === 'sale' ? 'العميل' : 'المورد'}: ${partnerName(data, inv.partnerId)}`,
+      '',
+      ...inv.items.map((it: any) => `- ${it.name} × ${it.qty} = ${num(it.qty * it.price)}`),
+      '',
+      `الإجمالي قبل الضريبة: ${num(sub)}`,
+      `الضريبة (${st?.vatRate ?? 0}%): ${num(vat)}`,
+      `*الإجمالي: ${num(sub + vat)} ${st?.currency ?? ''}*`,
+      inv.status === 'unpaid' ? '\nالحالة: غير مدفوعة — برجاء السداد' : '\nالحالة: مدفوعة ✓',
+    ].join('\n');
+    const url = p?.phone
+      ? `https://wa.me/2${String(p.phone).replace(/\D/g, '')}?text=${encodeURIComponent(lines)}`
+      : `https://wa.me/?text=${encodeURIComponent(lines)}`;
+    window.open(url, '_blank');
+  };
 
   const doPrint = (id: string) => {
     const inv = data.invoices.find(i => i.id === id)!;
@@ -98,6 +122,7 @@ export function SalesPage({ kind }: { kind: 'sale' | 'purchase' }) {
             <div key="a" className="row">
               {i.status === 'unpaid' && <Button size="sm" onClick={() => { update('invoices', i.id, { status: 'paid' }); toast('تم تحصيل الفاتورة'); }}>تحصيل</Button>}
               <Button size="sm" variant="outline" onClick={() => doPrint(i.id)}>طباعة</Button>
+              <Button size="sm" variant="outline" title="مشاركة عبر واتساب" onClick={() => doShare(i.id)}>واتساب</Button>
             </div>,
           ]} />
       </div>
