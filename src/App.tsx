@@ -20,7 +20,7 @@ import { ReportsPage } from './modules/reports/ReportsPage';
 import { CalendarPage } from './modules/calendar/CalendarPage';
 import { SettingsPage } from './modules/settings/SettingsPage';
 import { TeamPage } from './modules/team/TeamPage';
-import { OrgProvider } from './org/Org';
+import { OrgProvider, useOrg } from './org/Org';
 import { seed } from './seed/seed';
 import { Onboarding } from './components/system/Onboarding';
 import { LockScreen } from './components/system/LockScreen';
@@ -59,6 +59,7 @@ const pages: Record<string, () => JSX.Element> = {
 
 function Gate() {
   const { data, ingest, enterCloud, enterLocal, toast } = useStore();
+  const { refresh: refreshOrg } = useOrg();
   const [unlocked, setUnlocked] = useState(() => !data.settings?.passwordHash);
   const [auth, setAuth] = useState<'checking' | 'out' | 'in'>('checking');
 
@@ -69,19 +70,13 @@ function Gate() {
         localStorage.removeItem('ns_guest');
         enterCloud();
         try {
-          // multi-tenant: ensure the user's organization exists, then attach org_id
+          // multi-tenant: make sure the workspace context is loaded
+          // (creates the personal org on first login), then attach org_id
           // to any legacy rows so teammates can see them
-          await backend.ensureOrg(data.settings?.companyName || '');
           const remote = await backend.loadAll();
           if (remote) {
-            const orgs = await backend.loadOrgs();
-            if (orgs[0]) {
-              backend.setActiveOrg(orgs[0].id);
-              const savedOrg = localStorage.getItem('ns_active_org');
-              const active = orgs.find(o => o.id === savedOrg) ?? orgs[0];
-              backend.setActiveOrg(active.id);
-              await backend.migrateOrgIds(remote);
-            }
+            await refreshOrg();
+            await backend.migrateOrgIds(remote);
             const cloudEmpty = !remote.settings?.companyName;
             if (cloudEmpty && data.settings?.companyName) {
               const rep = await backend.migrateLocal(data);
