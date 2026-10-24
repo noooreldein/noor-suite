@@ -138,8 +138,11 @@ export function mergeLocal(local: DBData, remote: DBData): DBData {
 
 export async function loadOrgs(): Promise<OrgInfo[]> {
   const user = await getUser(); if (!user) return [];
-  const { data: memberships, error } = await sb.from('ns_members').select('id, org_id, role');
-  if (error || !memberships?.length) return [];
+  // RLS lets us see ALL members of our orgs — keep only OUR OWN memberships,
+  // otherwise the first member's role (the owner) leaks as yours.
+  const { data: all, error } = await sb.from('ns_members').select('id, org_id, role, user_id');
+  const memberships = (all ?? []).filter((m: any) => m.user_id === user.id);
+  if (error || !memberships.length) return [];
   const ids = memberships.map((m: any) => m.org_id);
   const { data: orgs } = await sb.from('ns_orgs').select('id, name').in('id', ids);
   return (orgs ?? []).map((o: any) => ({
