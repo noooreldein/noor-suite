@@ -3,9 +3,9 @@
 <br>
 
 <p>
-  <img src="https://img.shields.io/badge/version-3.0.0-4f46e5.svg?style=flat-square" alt="version" />
+  <img src="https://img.shields.io/badge/version-3.1.0-4f46e5.svg?style=flat-square" alt="version" />
   <img src="https://img.shields.io/badge/build-passing-16a34a.svg?style=flat-square" alt="build" />
-  <img src="https://img.shields.io/badge/tests-44%20passing-16a34a.svg?style=flat-square" alt="tests" />
+  <img src="https://img.shields.io/badge/tests-47%20passing-16a34a.svg?style=flat-square" alt="tests" />
   <img src="https://img.shields.io/badge/license-MIT-2563eb.svg?style=flat-square" alt="license" />
   <img src="https://img.shields.io/badge/runtime%20deps-zero-0891b2.svg?style=flat-square" alt="deps" />
 </p>
@@ -66,6 +66,7 @@ src/
 └── i18n/           # عربي/إنجليزي RTL/LTR كامل
 ```
 
+- **عمليات ذرّية على السيرفر**: البيع والاستلام والتحويل بيتطبقوا كمعاملة واحدة (PostgreSQL function بقفل صفوف المنتج) — أي انقطاع شبكة أو جهازين شغالين مع بعض مستحيل يسيبوا نصف عملية أو يضيعوا تحديث مخزون.
 - **Write-through sync**: كل عملية بتتكتب محلياً فوراً (الواجهة مبتستنىش الشبكة) وتتزامن سحابياً، مع طابور إعادة محاولة دائم لو النت قطع.
 - **عزل على مستوى القاعدة**: Row-Level Security على كل جدول — العرض لأعضاء المنظمة، الكتابة حسب الدور، وحذف القيود للمالك فقط.
 - **كشف تعارض الأجهزة + نسخ تلقائية**: نسخة احتياطية سحابية كل 24 ساعة (آخر 7 نسخ) مع استعادة بضغطة، وسجل مزامنة لكل تعارض.
@@ -106,7 +107,7 @@ CI على GitHub Actions يمنع النشر إن فشل أي اختبار، و�
 - [x] Multi-tenant: منظمات وأدوار ودعوات
 - [x] الفروع والتحويل بين المخازن
 - [x] موثوقية سحابية: تعارضات + نسخ احتياطية
-- [ ] ذرية العمليات على السيرفر (RPC)
+- [x] ذرية العمليات على السيرفر — كل عملية كمعاملة RPC واحدة (ns_apply_op)
 - [ ] تطبيق موبايل (React Native)
 
 ## الترخيص

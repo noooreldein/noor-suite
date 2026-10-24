@@ -3,9 +3,10 @@
  * plus UI state (toasts, confirm dialogs). Mutation via collection CRUD
  * which persists to localStorage on every change.
  */
-import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import * as db from '../lib/db';
 import * as backend from '../lib/backend';
+import { branchDeltas } from '../lib/branches';
 import { uid } from '../lib/id';
 import { Collection, Settings } from '../types/core';
 
@@ -22,6 +23,7 @@ interface StoreCtx {
   toast: (msg: string, kind?: 'ok' | 'err') => void;
   reseed: () => void;
   ingest: (remote: db.DBData) => void;
+  runOperation: (fn: () => void) => void;
   enterCloud: () => void;
   enterLocal: () => void;
   exportAll: () => string;
@@ -54,6 +56,10 @@ export function AppStoreProvider({ children, seedFn }: { children: React.ReactNo
     document.documentElement.dataset.theme = s.theme;
   }, [data.settings]);
 
+  /* Active atomic operation batch — while set, cloud writes are diverted
+   * into it and applied as ONE server-side RPC (ns_apply_op). */
+  const opBatch = useRef<backend.Operation | null>(null);
+
   const commit = useCallback((fn: (d: db.DBData) => db.DBData) => {
     setData(prev => fn(prev));
   }, []);
@@ -62,6 +68,7 @@ export function AppStoreProvider({ children, seedFn }: { children: React.ReactNo
     const id = rec.id ?? uid(col.slice(0, 3));
     const full = { ...rec, id, createdAt: new Date().toISOString() };
     commit(d => ({ ...d, [col]: [...(d as any)[col], full] }));
+    if (opBatch.current) { opBatch.current.upserts.push({ c: col as any, e: full }); return id; }
     if (backend.getMode() === 'cloud')
       backend.upsert(col as any, full).then(ok => { if (!ok) toast('تعذر الحفظ السحابي — سيُعاد تلقائيًا عند الاتصال', 'err'); });
     return id;
@@ -77,15 +84,33 @@ export function AppStoreProvider({ children, seedFn }: { children: React.ReactNo
       });
       return { ...d, [col]: next };
     });
+    if (opBatch.current) {
+      const prev = (data as any)[col]?.find((r: any) => r.id === id);
+      // product stock changes ride the atomic op as per-branch deltas, never as blind upserts
+      if (col === 'products' && prev) opBatch.current.deltas.push(...branchDeltas(prev, merged));
+      else opBatch.current.upserts.push({ c: col as any, e: merged });
+      return;
+    }
     if (backend.getMode() === 'cloud' && merged)
       backend.upsert(col as any, merged).then(ok => { if (!ok) toast('تعذر الحفظ السحابي — سيُعاد تلقائيًا عند الاتصال', 'err'); });
   }, [commit]);
 
   const remove = useCallback((col: Collection, id: string) => {
     commit(d => ({ ...d, [col]: (d as any)[col].filter((r: any) => r.id !== id) }));
+    if (opBatch.current) { opBatch.current.deletes.push({ c: col as any, id }); return; }
     if (backend.getMode() === 'cloud')
       backend.remove(col as any, id).then(ok => { if (!ok) toast('تعذر الحذف السحابي — سيُعاد تلقائيًا عند الاتصال', 'err'); });
   }, [commit]);
+
+  /** Run a composite operation (sale, receive, transfer...) so that every
+   * write inside fn reaches the cloud as ONE atomic server-side RPC. */
+  const runOperation = useCallback((fn: () => void) => {
+    const batch: backend.Operation = { orgId: backend.getActiveOrg(), upserts: [], deltas: [], deletes: [] };
+    opBatch.current = batch;
+    try { fn(); } finally { opBatch.current = null; }
+    if (backend.getMode() === 'cloud')
+      backend.applyOperation(batch).then(ok => { if (!ok) toast('تعذر تنفيذ العملية سحابيًا — سيُعاد تلقائيًا عند الاتصال', 'err'); });
+  }, []);
 
   const setSettings = useCallback((patch: Partial<Settings>) => {
     let merged: any;
@@ -119,8 +144,8 @@ export function AppStoreProvider({ children, seedFn }: { children: React.ReactNo
 
   const value = useMemo(() => ({
     data, settings: data.settings, setSettings, add, update, remove,
-    toasts, toast, reseed, exportAll, importAll, ingest, enterCloud, enterLocal, branch, setBranch,
-  }), [data, setSettings, add, update, remove, toasts, toast, reseed, exportAll, importAll, ingest, enterCloud, enterLocal, branch, setBranch]);
+    toasts, toast, reseed, exportAll, importAll, ingest, enterCloud, enterLocal, branch, setBranch, runOperation,
+  }), [data, setSettings, add, update, remove, toasts, toast, reseed, exportAll, importAll, ingest, enterCloud, enterLocal, branch, setBranch, runOperation]);
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

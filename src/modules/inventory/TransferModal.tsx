@@ -6,7 +6,7 @@ import { Button } from '../../components/ui/Button';
 import { bstock, branchName, totalStock } from '../../lib/branches';
 
 export function TransferModal({ onClose }: { onClose: () => void }) {
-  const { data, update, add, toast, branch, setBranch } = useStore();
+  const { data, update, add, toast, branch, setBranch, runOperation } = useStore();
   const [from, setFrom] = useState(branch);
   const [to, setTo] = useState(data.branches.find(b => b.id !== branch)?.id ?? '');
   const [pid, setPid] = useState('');
@@ -20,13 +20,15 @@ export function TransferModal({ onClose }: { onClose: () => void }) {
     if (!product) return toast('اختر صنفاً', 'err');
     if (!to || to === from) return toast('اختر الفرع المستلم', 'err');
     if (qty <= 0 || qty > max) return toast(`الكمية أكبر من المتاح بفرع (${branchName(data.branches, from)}): ${max}`, 'err');
-    const bs: Record<string, number> = { ...(product.branchStock ?? { main: product.stock }) };
+    runOperation(() => {
+      const bs: Record<string, number> = { ...(product.branchStock ?? { main: product.stock }) };
     bs[from] = Math.max(0, (Number(bs[from]) || 0) - qty);
     bs[to] = (Number(bs[to]) || 0) + qty;
     const stock = Object.values(bs).reduce((a: number, v: any) => a + (Number(v) || 0), 0);
     update('products', product.id, { branchStock: bs, stock });
     add('stockMoves', { type: 'transfer', productId: product.id, name: product.name, delta: -qty,
       ref: `${branchName(data.branches, from)} ⇄ ${branchName(data.branches, to)}`, from, to });
+    });
     toast(`تم تحويل ${qty} من ${product.name} إلى ${branchName(data.branches, to)} ✓`);
     onClose();
   };

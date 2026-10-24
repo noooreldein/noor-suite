@@ -9,7 +9,7 @@ import { returnLines } from '../../lib/accounting';
 import { stockAfter, MAIN_BRANCH } from '../../lib/branches';
 
 export function ReturnModal({ invoiceId, onClose }: { invoiceId: string; onClose: () => void }) {
-  const { data, add, update, toast } = useStore();
+  const { data, add, update, toast, runOperation } = useStore();
   const inv = data.invoices.find((i: any) => i.id === invoiceId);
   const [qtys, setQtys] = useState<Record<string, number>>({});
   const [reason, setReason] = useState('');
@@ -28,7 +28,8 @@ export function ReturnModal({ invoiceId, onClose }: { invoiceId: string; onClose
   const submit = () => {
     const picked = lines.filter((l: any) => l.q > 0);
     if (!picked.length) return toast('حدد الكميات المرتجعة', 'err');
-    const retId = add('invoices', {
+    runOperation(() => {
+      const retId = add('invoices', {
       kind: 'return', originalId: invoiceId, partnerId: inv.partnerId, date: today(),
       items: picked.map((l: any) => ({ productId: l.productId, name: l.name, qty: l.q, price: l.price })),
       total: -total, status: 'returned', note: reason || 'مرتجع مبيعات',
@@ -43,6 +44,7 @@ export function ReturnModal({ invoiceId, onClose }: { invoiceId: string; onClose
       return sum + l.q * (prod?.cost ?? 0);
     }, 0);
     add('journals', { date: today(), note: 'مرتجع مبيعات', ref: retId, source: 'return', lines: returnLines(total, false, cogs) });
+    });
     toast(`تم تسجيل المرتجع (${num(total)} ج.م) والكميات رجعت للمخزون ✓`);
     onClose();
   };

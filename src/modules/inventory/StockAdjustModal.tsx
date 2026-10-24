@@ -7,15 +7,17 @@ import { today } from '../../lib/dates';
 import { stockAfter, bstock, branchName } from '../../lib/branches';
 
 export function StockAdjustModal({ id, onClose }: { id: string; onClose: () => void }) {
-  const { data, update, toast, add, branch } = useStore();
+  const { data, update, toast, add, branch, runOperation } = useStore();
   const p = data.products.find(x => x.id === id)!;
   const [qty, setQty] = useState(10);
 
   const apply = () => {
-    update('products', id, stockAfter(p, branch, qty));
+    runOperation(() => {
+      update('products', id, stockAfter(p, branch, qty));
     add('stockMoves', { type: 'adjust', productId: id, name: p.name, delta: qty, ref: id });
     const jl = adjustLines(qty * (p.cost ?? 0));
     if (jl.length) add('journals', { date: today(), note: `تسوية مخزون — ${p.name}`, ref: id, source: 'adjust', lines: jl });
+    });
     if (p.stock + qty <= p.minStock) {
       add('notifications', { title: 'مخزون منخفض', body: `${p.name} وصل لحد إعادة الطلب`, read: false });
     }

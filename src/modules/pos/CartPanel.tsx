@@ -23,7 +23,7 @@ export function CartPanel({ cart, setQty, clear, shiftOpen, shiftId }: {
   shiftOpen: boolean;
   shiftId: string | null;
 }) {
-  const { data, add, update, toast, branch } = useStore();
+  const { data, add, update, toast, branch, runOperation } = useStore();
   const [checkout, setCheckout] = useState(false);
   const [partnerId, setPartnerId] = useState('');
   const [discount, setDiscount] = useState(0);
@@ -46,7 +46,8 @@ export function CartPanel({ cart, setQty, clear, shiftOpen, shiftId }: {
     const status = method === 'credit'
       ? (paidNow > 0 ? 'partial' : 'unpaid')
       : (paidNow >= net ? 'paid' : paidNow > 0 ? 'partial' : 'unpaid');
-    const invId = add('invoices', {
+    runOperation(() => {
+      const invId = add('invoices', {
       kind: 'sale' as const,
       partnerId: partnerId || data.partners.find(p => p.type === 'customer')?.id || '',
       date: today(),
@@ -68,6 +69,7 @@ export function CartPanel({ cart, setQty, clear, shiftOpen, shiftId }: {
       add('stockMoves', { type: 'sale', productId: l.pid, name: l.name, delta: -l.qty, ref: invId, branch: branch });
     });
     add('journals', { date: today(), note: `فاتورة نقطة بيع (${METHODS.find(m => m.key === method)?.label})`, ref: invId, source: 'pos', lines: saleLines(net, Math.min(paidNow, net), method, cogs) });
+    });
     setCheckout(false);
     clear();
     toast(status === 'paid' ? 'تم إتمام البيع ✓' : status === 'partial' ? 'تم البيع — دفعة جزئية مسجلة ✓' : 'تم البيع آجل — مسجل على العميل ✓');

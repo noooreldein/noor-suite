@@ -25,3 +25,12 @@ export function stockAfter(p: any, branchId: string, delta: number) {
 export function branchName(branches: any[], id: string): string {
   return branches.find(b => b.id === id)?.name ?? 'الفرع الرئيسي';
 }
+
+/** Per-branch difference between two product states — the atomic-op payload.
+ * Returns [{ b: branchId, d: delta }] excluding zero deltas. */
+export function branchDeltas(prev: any, next: any): { p: string; b: string; d: number }[] {
+  const a = prev?.branchStock ?? (prev?.stock != null ? { [MAIN_BRANCH]: Number(prev.stock) || 0 } : {});
+  const b = next?.branchStock ?? {};
+  const keys = new Set([...Object.keys(a), ...Object.keys(b)]);
+  return [...keys].map(k => ({ p: prev?.id ?? next?.id, b: k, d: (Number(b[k]) || 0) - (Number(a[k]) || 0) })).filter(x => x.d !== 0);
+}

@@ -22,7 +22,7 @@ const STATUS: Record<string, { label: string; tone: 'gray' | 'blue' | 'green' | 
 };
 
 export function PurchaseOrdersPage() {
-  const { data, add, update, remove, toast, branch } = useStore();
+  const { data, add, update, remove, toast, branch, runOperation } = useStore();
   const [tab, setTab] = useState('orders');
   const [editing, setEditing] = useState<string | null>(null);
   const [cmpProduct, setCmpProduct] = useState('');
@@ -32,7 +32,8 @@ export function PurchaseOrdersPage() {
   const orders = [...data.purchaseOrders].sort((a, b) => (a.date < b.date ? 1 : -1));
 
   const receive = (po: any) => {
-    const rcvId = add('invoices', {
+    runOperation(() => {
+      const rcvId = add('invoices', {
       kind: 'purchase', partnerId: po.supplierId, date: today(),
       items: po.items.map((i: any) => ({ productId: i.productId, name: i.name, qty: i.qty, price: i.cost })),
       total: po.total, status: 'unpaid', note: `أمر شراء #${po.number}`,
@@ -44,6 +45,7 @@ export function PurchaseOrdersPage() {
     });
     add('journals', { date: today(), note: `استلام أمر شراء #${po.number}`, ref: rcvId, source: 'purchase', lines: purchaseLines(po.total, 0) });
     update('purchaseOrders', po.id, { status: 'received' });
+    });
     toast(`تم استلام أمر الشراء #${po.number} — المخزون اتحدث ✓`);
   };
 

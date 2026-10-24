@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { bstock, totalStock, stockAfter, MAIN_BRANCH } from '../branches';
+import { bstock, totalStock, stockAfter, branchDeltas, MAIN_BRANCH } from '../branches';
 import { normalize } from '../db';
 
 describe('branch stock helpers', () => {
@@ -32,5 +32,23 @@ describe('branch migration', () => {
     const out = normalize({ settings: null, products: [{ id: 'p1', name: 'x', stock: 9 }], branches: [] } as any);
     expect(out.branches[0].id).toBe('main');
     expect((out.products[0] as any).branchStock).toEqual({ main: 9 });
+  });
+});
+
+describe('atomic operation deltas', () => {
+  it('computes per-branch deltas between two product states', () => {
+    const prev = { id: 'p1', stock: 12, branchStock: { main: 8, b2: 4 } };
+    const next = { id: 'p1', stock: 11, branchStock: { main: 7, b2: 4 } };
+    expect(branchDeltas(prev, next)).toEqual([{ p: 'p1', b: 'main', d: -1 }]);
+  });
+
+  it('handles new branches and legacy products without branchStock', () => {
+    expect(branchDeltas({ id: 'p1', stock: 10 }, { id: 'p1', stock: 10, branchStock: { main: 6, alex: 4 } }))
+      .toEqual([{ p: 'p1', b: 'main', d: -4 }, { p: 'p1', b: 'alex', d: 4 }]);
+  });
+
+  it('returns empty when nothing changed', () => {
+    const p = { id: 'p1', stock: 5, branchStock: { main: 5 } };
+    expect(branchDeltas(p, { ...p, updatedAt: 'x' })).toEqual([]);
   });
 });

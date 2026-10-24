@@ -10,7 +10,7 @@ import { bstock, stockAfter } from '../../lib/branches';
 
 /** Line-item invoice builder with live stock validation. */
 export function InvoiceFormModal({ kind, onClose }: { kind: 'sale' | 'purchase'; onClose: () => void }) {
-  const { data, add, update, toast, branch } = useStore();
+  const { data, add, update, toast, branch, runOperation } = useStore();
   const partners = data.partners.filter((p: any) => p.type === (kind === 'sale' ? 'customer' : 'supplier'));
   const products = data.products;
 
@@ -32,7 +32,8 @@ export function InvoiceFormModal({ kind, onClose }: { kind: 'sale' | 'purchase';
   const submit = () => {
     if (!resolved.length) return toast('أضف صنفاً واحداً على الأقل', 'err');
     if (!partnerId) return toast('اختر الجهة', 'err');
-    const invId = add('invoices', {
+    runOperation(() => {
+      const invId = add('invoices', {
       kind, partnerId, date, status, branchId: kind === 'sale' ? branch : undefined,
       items: resolved.map(r => ({ productId: r.productId, name: r.name, qty: r.qty, price: r.price })),
       total,
@@ -59,6 +60,7 @@ export function InvoiceFormModal({ kind, onClose }: { kind: 'sale' | 'purchase';
     add('journals', kind === 'sale'
       ? { date, note: 'فاتورة مبيعات', ref: invId, source: 'sale', lines: saleLines(total, status === 'paid' ? total : 0, status === 'paid' ? 'cash' : 'credit', cogs) }
       : { date, note: 'فاتورة مشتريات', ref: invId, source: 'purchase', lines: purchaseLines(total, status === 'paid' ? total : 0) });
+    });
     toast('تم إصدار الفاتورة ✓');
     onClose();
   };

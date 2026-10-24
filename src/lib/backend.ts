@@ -59,12 +59,39 @@ export async function loadAll(): Promise<DBData | null> {
 }
 
 // ---- verified writes + persistent retry queue ----
-type Op = { coll: Coll; kind: 'upsert' | 'delete'; entity?: any; id?: string };
+type Op = { coll: Coll; kind: 'upsert' | 'delete' | 'op'; entity?: any; id?: string };
+
+export interface Operation {
+  orgId: string | null;
+  upserts: { c: Coll; e: any }[];
+  deltas: { p: string; b: string; d: number }[];
+  deletes: { c: Coll; id: string }[];
+}
 const QKEY = 'ns_retry_queue';
 let queue: Op[] = [];
 try { queue = JSON.parse(localStorage.getItem(QKEY) ?? '[]'); } catch { queue = []; }
 const persistQueue = () => localStorage.setItem(QKEY, JSON.stringify(queue));
 export function pendingCount() { return queue.length; }
+
+/** Atomic composite operation — applies stock deltas with row locks and row
+ * upserts/deletes in ONE database transaction (no lost updates, no partial
+ * sales). Falls back to the retry queue like any other write. */
+export async function rawApplyOp(op: Operation): Promise<boolean> {
+  const user = await getUser(); if (!user) return false;
+  const { error } = await sb.rpc('ns_apply_op', { p_op: {
+    orgId: op.orgId ?? activeOrg,
+    upserts: op.upserts.map(u => ({ t: tbl(u.c), e: u.e })),
+    deltas: op.deltas,
+    deletes: op.deletes.map(d => ({ t: tbl(d.c), id: d.id })),
+  } });
+  return !error;
+}
+
+export async function applyOperation(op: Operation): Promise<boolean> {
+  const ok = await rawApplyOp(op);
+  if (!ok) { queue.push({ coll: 'invoices', kind: 'op', entity: op }); persistQueue(); }
+  return ok;
+}
 
 async function rawUpsert(c: Coll, e: any): Promise<boolean> {
   const user = await getUser(); if (!user) return false;
@@ -150,7 +177,9 @@ export const getLoadMeta = () => lastMeta;
 export async function flushQueue(): Promise<number> {
   const still: Op[] = [];
   for (const op of queue) {
-    const ok = op.kind === 'upsert' ? await rawUpsert(op.coll, op.entity) : await rawDelete(op.coll, op.id!);
+    const ok = op.kind === 'upsert' ? await rawUpsert(op.coll, op.entity)
+      : op.kind === 'op' ? await rawApplyOp(op.entity as Operation)
+      : await rawDelete(op.coll, op.id!);
     if (!ok) still.push(op);
   }
   queue = still;
