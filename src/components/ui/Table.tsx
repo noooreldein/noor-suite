@@ -21,7 +21,15 @@ export function Table<T>({ cols, rows, render, empty, widths }: Props<T>) {
         </colgroup>
       )}
       <thead><tr>{cols.map(c => <th key={c}>{c}</th>)}</tr></thead>
-      <tbody>{rows.map((r, i) => <tr key={(r as any).id ?? i}>{render(r, i)}</tr>)}</tbody>
+      <tbody>
+        {rows.map((r, i) => (
+          <tr key={(r as any).id ?? i}>
+            {render(r, i).map((cell, ci) => (
+              <td key={ci}>{cell}</td>
+            ))}
+          </tr>
+        ))}
+      </tbody>
     </table>
   );
 }
