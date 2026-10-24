@@ -24,6 +24,9 @@ let activeOrg: string | null = null;
 export const setActiveOrg = (id: string | null) => { activeOrg = id; };
 export const getActiveOrg = () => activeOrg;
 
+/** Physical table name for a collection (ns_purchaseOrders -> ns_purchase_orders). */
+const tbl = (c: Coll) => 'ns_' + (c === 'purchaseOrders' ? 'purchase_orders' : c);
+
 export async function getSession() { return sb.auth.getSession(); }
 export async function getUser() { const { data } = await sb.auth.getUser(); return data.user; }
 export async function signUp(email: string, pw: string) { return sb.auth.signUp({ email, password: pw }); }
@@ -35,12 +38,19 @@ export async function loadAll(): Promise<DBData | null> {
   if (!user) return null;
   const out: any = { products: [], partners: [], invoices: [], leads: [], employees: [], attendance: [], tasks: [], ledger: [], purchaseOrders: [], notifications: [], stockMoves: [], shifts: [], accounts: [], journals: [], settings: null, meta: { version: 2 } };
   for (const c of COLLS) {
-    const { data, error } = await sb.from(`ns_${c}`).select('id, data, org_id');
+    const { data, error } = await sb.from(tbl(c)).select('id, data, org_id');
     if (error) throw new Error(error.message);
     out[c] = (data ?? []).map((r: any) => ({ ...r.data, id: r.id, orgId: r.org_id ?? null }));
   }
-  const { data: st } = await sb.from('ns_settings').select('data').eq('id', 'settings').maybeSingle();
-  if (st?.data) out.settings = st.data as Settings;
+  const { data: st } = await sb.from('ns_settings').select('data').eq('id', `settings_${user.id}`).maybeSingle();
+  if (!st?.data) {
+    // legacy global row (only readable by whoever owns it)
+    const { data: old } = await sb.from('ns_settings').select('data').eq('id', 'settings').maybeSingle();
+    if (old?.data) {
+      out.settings = old.data as Settings;
+      await saveSettings(old.data as Settings); // re-key it to this user
+    }
+  } else out.settings = st.data as Settings;
   return out as DBData;
 }
 
@@ -54,11 +64,11 @@ export function pendingCount() { return queue.length; }
 
 async function rawUpsert(c: Coll, e: any): Promise<boolean> {
   const user = await getUser(); if (!user) return false;
-  const { error } = await sb.from(`ns_${c}`).upsert({ id: e.id, user_id: user.id, org_id: activeOrg, data: e });
+  const { error } = await sb.from(tbl(c)).upsert({ id: e.id, user_id: user.id, org_id: activeOrg, data: e });
   return !error;
 }
 async function rawDelete(c: Coll, id: string): Promise<boolean> {
-  const { error } = await sb.from(`ns_${c}`).delete().eq('id', id);
+  const { error } = await sb.from(tbl(c)).delete().eq('id', id);
   return !error;
 }
 
@@ -76,10 +86,12 @@ export async function remove(c: Coll, id: string): Promise<boolean> {
   return ok;
 }
 
+/** Settings rows are keyed per user (settings_<uid>) — the old global
+ * 'settings' id made every second user's upsert collide with the first
+ * owner's row and fail RLS. loadSettings falls back to the legacy row. */
 export async function saveSettings(s: Settings | null): Promise<boolean> {
   const user = await getUser(); if (!user || !s) return false;
-  const { error } = await sb.from('ns_settings').upsert({ id: 'settings', user_id: user.id, data: s });
-
+  const { error } = await sb.from('ns_settings').upsert({ id: `settings_${user.id}`, user_id: user.id, data: s });
   return !error;
 }
 
