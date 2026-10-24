@@ -26,6 +26,9 @@ interface StoreCtx {
   enterLocal: () => void;
   exportAll: () => string;
   importAll: (json: string) => boolean;
+  /** active working branch (stock location) — per user, per device */
+  branch: string;
+  setBranch: (id: string) => void;
 }
 
 const Ctx = createContext<StoreCtx>(null as any);
@@ -36,6 +39,8 @@ export function AppStoreProvider({ children, seedFn }: { children: React.ReactNo
     return loaded.settings ? loaded : db.empty();
   });
   const [cloud, setCloud] = useState(false);
+  const [branch, setBranchState] = useState<string>(() => localStorage.getItem('ns_branch') || 'main');
+  const setBranch = useCallback((id: string) => { setBranchState(id); localStorage.setItem('ns_branch', id); }, []);
   const [toasts, setToasts] = useState<Toast[]>([]);
 
   useEffect(() => { if (!cloud) db.save(data); }, [data, cloud]);
@@ -114,8 +119,8 @@ export function AppStoreProvider({ children, seedFn }: { children: React.ReactNo
 
   const value = useMemo(() => ({
     data, settings: data.settings, setSettings, add, update, remove,
-    toasts, toast, reseed, exportAll, importAll, ingest, enterCloud, enterLocal,
-  }), [data, setSettings, add, update, remove, toasts, toast, reseed, exportAll, importAll, ingest, enterCloud, enterLocal]);
+    toasts, toast, reseed, exportAll, importAll, ingest, enterCloud, enterLocal, branch, setBranch,
+  }), [data, setSettings, add, update, remove, toasts, toast, reseed, exportAll, importAll, ingest, enterCloud, enterLocal, branch, setBranch]);
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

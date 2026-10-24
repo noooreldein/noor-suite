@@ -6,10 +6,11 @@ import { num } from '../../lib/format';
 import { today } from '../../lib/dates';
 import { saleLines, purchaseLines } from '../../lib/accounting';
 import { total as calcTotal } from '../../lib/money';
+import { bstock, stockAfter } from '../../lib/branches';
 
 /** Line-item invoice builder with live stock validation. */
 export function InvoiceFormModal({ kind, onClose }: { kind: 'sale' | 'purchase'; onClose: () => void }) {
-  const { data, add, update, toast } = useStore();
+  const { data, add, update, toast, branch } = useStore();
   const partners = data.partners.filter((p: any) => p.type === (kind === 'sale' ? 'customer' : 'supplier'));
   const products = data.products;
 
@@ -24,7 +25,7 @@ export function InvoiceFormModal({ kind, onClose }: { kind: 'sale' | 'purchase';
   const resolved = lines.map(l => {
     const p = data.products.find((x: any) => x.id === l.productId)!;
     const price = kind === 'sale' ? p?.price ?? 0 : p?.cost ?? 0;
-    return { ...l, name: p?.name ?? '', price, stock: p?.stock ?? 0 };
+    return { ...l, name: p?.name ?? '', price, stock: bstock(p, branch) };
   });
   const total = calcTotal(resolved);
 
@@ -32,21 +33,21 @@ export function InvoiceFormModal({ kind, onClose }: { kind: 'sale' | 'purchase';
     if (!resolved.length) return toast('أضف صنفاً واحداً على الأقل', 'err');
     if (!partnerId) return toast('اختر الجهة', 'err');
     const invId = add('invoices', {
-      kind, partnerId, date, status,
+      kind, partnerId, date, status, branchId: kind === 'sale' ? branch : undefined,
       items: resolved.map(r => ({ productId: r.productId, name: r.name, qty: r.qty, price: r.price })),
       total,
     });
     if (kind === 'sale') {
       resolved.forEach(r => {
         const p = data.products.find((x: any) => x.id === r.productId)!;
-        update('products', r.productId, { stock: Math.max(0, p.stock - r.qty) });
-        add('stockMoves', { type: 'sale', productId: r.productId, name: r.name, delta: -r.qty, ref: invId });
+        update('products', r.productId, stockAfter(p, branch, -r.qty));
+        add('stockMoves', { type: 'sale', productId: r.productId, name: r.name, delta: -r.qty, ref: invId, branch });
       });
     } else {
       resolved.forEach(r => {
         const p = data.products.find((x: any) => x.id === r.productId)!;
-        update('products', r.productId, { stock: p.stock + r.qty });
-        add('stockMoves', { type: 'purchase', productId: r.productId, name: r.name, delta: r.qty, ref: invId });
+        update('products', r.productId, stockAfter(p, branch, r.qty));
+        add('stockMoves', { type: 'purchase', productId: r.productId, name: r.name, delta: r.qty, ref: invId, branch });
       });
     }
     const cogs = kind === 'sale'

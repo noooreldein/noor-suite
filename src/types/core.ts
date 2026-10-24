@@ -22,7 +22,7 @@ export type Collection =
   | 'stockMoves'
   | 'shifts'
   | 'accounts'
-  | 'journals';
+  | 'journals' | 'branches';
 
 export interface Settings {
   companyName: string;

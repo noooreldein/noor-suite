@@ -1,3 +1,4 @@
+import { bstock, stockAfter } from '../../lib/branches';
 /** POS cart + checkout flow — multi-payment, shift-bound, stock-move logged. */
 import { useMemo, useState } from 'react';
 import { useStore } from '../../store/AppStore';
@@ -22,7 +23,7 @@ export function CartPanel({ cart, setQty, clear, shiftOpen, shiftId }: {
   shiftOpen: boolean;
   shiftId: string | null;
 }) {
-  const { data, add, update, toast } = useStore();
+  const { data, add, update, toast, branch } = useStore();
   const [checkout, setCheckout] = useState(false);
   const [partnerId, setPartnerId] = useState('');
   const [discount, setDiscount] = useState(0);
@@ -31,7 +32,7 @@ export function CartPanel({ cart, setQty, clear, shiftOpen, shiftId }: {
 
   const lines = useMemo(() => Object.entries(cart).map(([pid, qty]) => {
     const p = data.products.find(x => x.id === pid)!;
-    return { pid, name: p.name, qty, price: p.price, stock: p.stock };
+    return { pid, name: p.name, qty, price: p.price, stock: bstock(p, branch) };
   }), [cart, data.products]);
 
   const gross = calcTotal(lines);
@@ -55,6 +56,7 @@ export function CartPanel({ cart, setQty, clear, shiftOpen, shiftId }: {
       paymentMethod: method,
       collected: method === 'credit' ? paidNow : Math.min(paidNow, net),
       shiftId: shiftId,
+      branchId: branch,
     });
     const cogs = lines.reduce((sum, l) => {
       const p = data.products.find(x => x.id === l.pid);
@@ -62,8 +64,8 @@ export function CartPanel({ cart, setQty, clear, shiftOpen, shiftId }: {
     }, 0);
     lines.forEach(l => {
       const p = data.products.find(x => x.id === l.pid)!;
-      update('products', l.pid, { stock: Math.max(0, p.stock - l.qty) });
-      add('stockMoves', { type: 'sale', productId: l.pid, name: l.name, delta: -l.qty, ref: invId });
+      update('products', l.pid, stockAfter(p, branch, -l.qty));
+      add('stockMoves', { type: 'sale', productId: l.pid, name: l.name, delta: -l.qty, ref: invId, branch: branch });
     });
     add('journals', { date: today(), note: `فاتورة نقطة بيع (${METHODS.find(m => m.key === method)?.label})`, ref: invId, source: 'pos', lines: saleLines(net, Math.min(paidNow, net), method, cogs) });
     setCheckout(false);

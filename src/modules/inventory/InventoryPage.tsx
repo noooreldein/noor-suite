@@ -11,15 +11,18 @@ import { download, toCSV } from '../../lib/csv';
 import { ProductFormModal } from './ProductFormModal';
 import { StockAdjustModal } from './StockAdjustModal';
 import { today } from '../../lib/dates';
+import { bstock, totalStock, branchName } from '../../lib/branches';
+import { BranchesModal } from './BranchesModal';
+import { TransferModal } from './TransferModal';
 import { useOrg } from '../../org/Org';
 import { canDo, MANAGER_UP } from '../../lib/permissions';
 import type { Role } from '../../lib/permissions';
 import { Modal } from '../../components/ui/Modal';
 
-const MOVE_LABELS: Record<string, string> = { sale: 'بيع', return: 'مرتجع', purchase: 'شراء', adjust: 'تسوية', receive: 'استلام' };
+const MOVE_LABELS: Record<string, string> = { sale: 'بيع', return: 'مرتجع', purchase: 'شراء', adjust: 'تسوية', receive: 'استلام' , transfer: 'تحويل فرع'};
 
 export function InventoryPage() {
-  const { data, remove, toast, update } = useStore();
+  const { data, remove, toast, update, branch } = useStore();
   const { org } = useOrg();
   const canDelete = canDo((org?.role ?? null) as Role | null, MANAGER_UP);
   const [q, setQ] = useState('');
@@ -28,6 +31,8 @@ export function InventoryPage() {
   const [adjusting, setAdjusting] = useState<string | null>(null);
   const [confirmId, setConfirmId] = useState<string | null>(null);
   const [showMoves, setShowMoves] = useState(false);
+  const [showBranches, setShowBranches] = useState(false);
+  const [transfer, setTransfer] = useState(false);
 
   const rows = useMemo(() => data.products.filter(p =>
     (p.name.includes(q) || p.sku.toLowerCase().includes(q.toLowerCase()) || p.category.includes(q)) &&
@@ -51,6 +56,8 @@ export function InventoryPage() {
         <button className={`chip ${lowOnly ? 'on' : ''}`} onClick={() => setLowOnly(v => !v)}>⚠ يحتاج تعويض</button>
         <Button variant="outline" onClick={() => download(`inventory-${today()}.csv`, toCSV(data.products))}>تصدير CSV</Button>
         <Button variant="outline" onClick={() => setShowMoves(true)}>سجل حركة المخزون</Button>
+        <Button variant="outline" onClick={() => setShowBranches(true)}>🏪 الفروع</Button>
+        <Button variant="outline" onClick={() => setTransfer(true)}>⇄ تحويل بين الفروع</Button>
         <Button onClick={() => setEditing('new')}>+ منتج جديد</Button>
       </div>
 
@@ -62,9 +69,11 @@ export function InventoryPage() {
             <Badge key="c" tone="primary">{p.category}</Badge>,
             <span key="p" className="mono">{num(p.price)}</span>,
             <span key="ct" className="mono" style={{ color: 'var(--soft)' }}>{num(p.cost)}</span>,
-            p.stock === 0 ? <Badge key="st" tone="red">نفد</Badge>
-              : p.stock <= p.minStock ? <Badge key="st" tone="amber">{p.stock}</Badge>
-              : <Badge key="st" tone="green">{p.stock} {p.unit}</Badge>,
+            (() => { const bs = bstock(p, branch); const tot = totalStock(p);
+              return (<span key="st" className="row" style={{ gap: 6, flexWrap: 'nowrap' }}>
+                {bs === 0 ? <Badge tone="red">نفد</Badge> : bs <= p.minStock ? <Badge tone="amber">{bs}</Badge> : <Badge tone="green">{bs} {p.unit}</Badge>}
+                {data.branches.length > 1 && tot !== bs && <span style={{ fontSize: 11, color: 'var(--soft)' }}>إجمالي {tot}</span>}
+              </span>); })(),
             <span key="m">{p.minStock}</span>,
             <div key="a" className="row">
               <Button size="sm" variant="outline" onClick={() => setAdjusting(p.id)}>مخزون +</Button>
@@ -80,7 +89,7 @@ export function InventoryPage() {
             <Table cols={['التاريخ', 'النوع', 'الصنف', 'الكمية', 'مرجع']} rows={moves}
               render={(m: any) => [
                 <span key="d" className="mono" style={{ fontSize: 12 }}>{new Date(m.createdAt).toLocaleString('ar-EG', { dateStyle: 'short', timeStyle: 'short' })}</span>,
-                <Badge key="t" tone={m.type === 'sale' ? 'red' : m.type === 'return' ? 'amber' : 'green'}>{MOVE_LABELS[m.type] ?? m.type}</Badge>,
+                <Badge key="t" tone={m.type === 'sale' ? 'red' : m.type === 'return' ? 'amber' : m.type === 'transfer' ? 'primary' : 'green'}>{MOVE_LABELS[m.type] ?? m.type}</Badge>,
                 <b key="n">{m.name}</b>,
                 <b key="q" style={{ color: m.delta < 0 ? 'var(--danger, #dc2626)' : 'green' }}>{m.delta > 0 ? '+' : ''}{m.delta}</b>,
                 <span key="r" className="mono" style={{ fontSize: 11.5, color: 'var(--soft)' }}>{m.ref ? m.ref.slice(0, 8) : '—'}</span>,
@@ -90,6 +99,8 @@ export function InventoryPage() {
       )}
       {editing && <ProductFormModal id={editing === 'new' ? null : editing} onClose={() => setEditing(null)} />}
       {adjusting && <StockAdjustModal id={adjusting} onClose={() => setAdjusting(null)} />}
+      {showBranches && <BranchesModal onClose={() => setShowBranches(false)} />}
+      {transfer && <TransferModal onClose={() => setTransfer(false)} />}
       {confirmId && (
         <div className="overlay" onMouseDown={e => e.target === e.currentTarget && setConfirmId(null)}>
           <div className="modal" style={{ maxWidth: 420 }}>

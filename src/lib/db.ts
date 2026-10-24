@@ -18,6 +18,7 @@ export interface DBData {
   purchaseOrders: any[];
   notifications: any[];
   stockMoves: any[];
+  branches: any[];
   shifts: any[];
   accounts: any[];
   journals: any[];
@@ -57,7 +58,7 @@ export function importJSON(text: string): DBData | null {
 export function empty(): DBData {
   return {
     products: [], partners: [], invoices: [], leads: [], employees: [],
-    attendance: [], tasks: [], ledger: [], purchaseOrders: [], notifications: [], stockMoves: [], shifts: [],
+    attendance: [], tasks: [], ledger: [], purchaseOrders: [], notifications: [], stockMoves: [], shifts: [], branches: [],
     accounts: DEFAULT_COA.map(a => ({ ...a, createdAt: new Date().toISOString() })),
     journals: [],
     settings: null,
@@ -72,6 +73,12 @@ export function normalize(data: any): DBData {
     if (!Array.isArray((out as any)[k])) (out as any)[k] = [];
   });
   if (typeof out.settings !== 'object' || out.settings === null) out.settings = null;
+  // ensure a main branch always exists (structural data, not mock data)
+  if (!out.branches.some(b => b.id === 'main')) {
+    out.branches = [{ id: 'main', name: 'الفرع الرئيسي', createdAt: new Date().toISOString() }, ...out.branches];
+  }
+  // one-time migration: flat product.stock -> per-branch branchStock
+  out.products = out.products.map((p: any) => p.branchStock ? p : { ...p, branchStock: { main: Number(p.stock) || 0 } });
   // ensure a chart of accounts always exists (structural data, not mock data)
   if (!out.accounts.length) {
     out.accounts = DEFAULT_COA.map(a => ({ ...a, id: a.id, createdAt: new Date().toISOString() }));

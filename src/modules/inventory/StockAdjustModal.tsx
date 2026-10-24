@@ -4,14 +4,15 @@ import { Modal } from '../../components/ui/Modal';
 import { Button } from '../../components/ui/Button';
 import { adjustLines } from '../../lib/accounting';
 import { today } from '../../lib/dates';
+import { stockAfter, bstock, branchName } from '../../lib/branches';
 
 export function StockAdjustModal({ id, onClose }: { id: string; onClose: () => void }) {
-  const { data, update, toast, add } = useStore();
+  const { data, update, toast, add, branch } = useStore();
   const p = data.products.find(x => x.id === id)!;
   const [qty, setQty] = useState(10);
 
   const apply = () => {
-    update('products', id, { stock: p.stock + qty });
+    update('products', id, stockAfter(p, branch, qty));
     add('stockMoves', { type: 'adjust', productId: id, name: p.name, delta: qty, ref: id });
     const jl = adjustLines(qty * (p.cost ?? 0));
     if (jl.length) add('journals', { date: today(), note: `تسوية مخزون — ${p.name}`, ref: id, source: 'adjust', lines: jl });
@@ -24,7 +25,7 @@ export function StockAdjustModal({ id, onClose }: { id: string; onClose: () => v
 
   return (
     <Modal title={`إضافة مخزون — ${p.name}`} onClose={onClose} width={420}>
-      <p style={{ color: 'var(--soft)', fontSize: 13 }}>المتوفر حالياً: <b>{p.stock}</b> — الحد: <b>{p.minStock}</b></p>
+      <p style={{ color: 'var(--soft)', fontSize: 13 }}>المتوفر بفرع ({branchName(data.branches, branch)}): <b>{bstock(p, branch)}</b> — الحد: <b>{p.minStock}</b></p>
       <label className="field">الكمية المضافة</label>
       <input type="number" min={1} value={qty} onChange={e => setQty(Number(e.target.value) || 0)} />
       <div className="modal-actions">

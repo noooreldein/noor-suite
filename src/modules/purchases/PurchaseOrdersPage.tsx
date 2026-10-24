@@ -1,3 +1,4 @@
+import { stockAfter } from '../../lib/branches';
 /** Procurement — purchase orders + supplier price comparison. */
 import { useMemo, useState } from 'react';
 import { useStore } from '../../store/AppStore';
@@ -21,7 +22,7 @@ const STATUS: Record<string, { label: string; tone: 'gray' | 'blue' | 'green' | 
 };
 
 export function PurchaseOrdersPage() {
-  const { data, add, update, remove, toast } = useStore();
+  const { data, add, update, remove, toast, branch } = useStore();
   const [tab, setTab] = useState('orders');
   const [editing, setEditing] = useState<string | null>(null);
   const [cmpProduct, setCmpProduct] = useState('');
@@ -38,7 +39,7 @@ export function PurchaseOrdersPage() {
     });
     po.items.forEach((it: any) => {
       const prod = data.products.find(p => p.id === it.productId);
-      if (prod) update('products', it.productId, { stock: prod.stock + it.qty });
+      if (prod) update('products', it.productId, stockAfter(prod, branch, it.qty));
       add('stockMoves', { type: 'purchase', productId: it.productId, name: it.name, delta: it.qty, ref: rcvId });
     });
     add('journals', { date: today(), note: `استلام أمر شراء #${po.number}`, ref: rcvId, source: 'purchase', lines: purchaseLines(po.total, 0) });

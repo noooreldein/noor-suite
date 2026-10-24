@@ -6,6 +6,7 @@ import { Button } from '../../components/ui/Button';
 import { num } from '../../lib/format';
 import { today } from '../../lib/dates';
 import { returnLines } from '../../lib/accounting';
+import { stockAfter, MAIN_BRANCH } from '../../lib/branches';
 
 export function ReturnModal({ invoiceId, onClose }: { invoiceId: string; onClose: () => void }) {
   const { data, add, update, toast } = useStore();
@@ -34,7 +35,7 @@ export function ReturnModal({ invoiceId, onClose }: { invoiceId: string; onClose
     });
     picked.forEach((l: any) => {
       const p = data.products.find((x: any) => x.id === l.productId);
-      if (p) update('products', l.productId, { stock: p.stock + l.q });
+      if (p) update('products', l.productId, stockAfter(p, inv.branchId || MAIN_BRANCH, l.q));
       add('stockMoves', { type: 'return', productId: l.productId, name: l.name, delta: l.q, ref: retId });
     });
     const cogs = picked.reduce((sum: number, l: any) => {

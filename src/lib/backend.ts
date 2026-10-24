@@ -14,8 +14,8 @@ let mode: Mode = 'local';
 export const getMode = () => mode;
 export const setMode = (m: Mode) => { mode = m; };
 
-export type Coll = 'products' | 'partners' | 'invoices' | 'leads' | 'employees' | 'attendance' | 'tasks' | 'ledger' | 'purchaseOrders' | 'notifications' | 'stockMoves' | 'shifts' | 'accounts' | 'journals';
-const COLLS: Coll[] = ['products', 'partners', 'invoices', 'leads', 'employees', 'attendance', 'tasks', 'ledger', 'purchaseOrders', 'notifications', 'stockMoves', 'shifts', 'accounts', 'journals'];
+export type Coll = 'products' | 'partners' | 'invoices' | 'leads' | 'employees' | 'attendance' | 'tasks' | 'ledger' | 'purchaseOrders' | 'notifications' | 'stockMoves' | 'shifts' | 'accounts' | 'journals' | 'branches';
+const COLLS: Coll[] = ['products', 'partners', 'invoices', 'leads', 'employees', 'attendance', 'tasks', 'ledger', 'purchaseOrders', 'notifications', 'stockMoves', 'shifts', 'accounts', 'journals', 'branches'];
 
 export type Role = 'owner' | 'manager' | 'accountant' | 'cashier' | 'warehouse' | 'sales';
 export interface OrgInfo { id: string; name: string; role: Role; }
