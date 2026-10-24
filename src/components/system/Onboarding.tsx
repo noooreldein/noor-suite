@@ -20,6 +20,8 @@ export function Onboarding() {
       const patch: any = { companyName: name.trim(), currency: currency.trim() || 'ج.م', vatRate: vat, lang, theme: 'light' };
       if (pw.trim()) patch.passwordHash = await sha256(pw.trim());
       setSettings(patch);
+      // name the personal workspace after the company (first login only)
+      import('../../lib/backend').then(b => { b.getActiveOrg() && b.renameOrg(patch.companyName).catch(() => {}); });
     }
     setBusy(false);
   };
