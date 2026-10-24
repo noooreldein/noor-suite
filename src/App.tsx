@@ -19,6 +19,8 @@ import { BiPage } from './modules/bi/BiPage';
 import { ReportsPage } from './modules/reports/ReportsPage';
 import { CalendarPage } from './modules/calendar/CalendarPage';
 import { SettingsPage } from './modules/settings/SettingsPage';
+import { TeamPage } from './modules/team/TeamPage';
+import { OrgProvider } from './org/Org';
 import { seed } from './seed/seed';
 import { Onboarding } from './components/system/Onboarding';
 import { LockScreen } from './components/system/LockScreen';
@@ -52,6 +54,7 @@ const pages: Record<string, () => JSX.Element> = {
   bi: BiPage,
   calendar: CalendarPage,
   settings: SettingsPage,
+  team: TeamPage,
 };
 
 function Gate() {
@@ -66,8 +69,19 @@ function Gate() {
         localStorage.removeItem('ns_guest');
         enterCloud();
         try {
+          // multi-tenant: ensure the user's organization exists, then attach org_id
+          // to any legacy rows so teammates can see them
+          await backend.ensureOrg(data.settings?.companyName || '');
           const remote = await backend.loadAll();
           if (remote) {
+            const orgs = await backend.loadOrgs();
+            if (orgs[0]) {
+              backend.setActiveOrg(orgs[0].id);
+              const savedOrg = localStorage.getItem('ns_active_org');
+              const active = orgs.find(o => o.id === savedOrg) ?? orgs[0];
+              backend.setActiveOrg(active.id);
+              await backend.migrateOrgIds(remote);
+            }
             const cloudEmpty = !remote.settings?.companyName;
             if (cloudEmpty && data.settings?.companyName) {
               const rep = await backend.migrateLocal(data);
@@ -114,7 +128,9 @@ export default function App() {
     <ErrorBoundary>
       <AppStoreProvider seedFn={seedFn}>
         <I18nProvider>
-          <Gate />
+          <OrgProvider>
+            <Gate />
+          </OrgProvider>
         </I18nProvider>
       </AppStoreProvider>
     </ErrorBoundary>

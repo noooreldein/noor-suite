@@ -17,6 +17,13 @@ export const setMode = (m: Mode) => { mode = m; };
 export type Coll = 'products' | 'partners' | 'invoices' | 'leads' | 'employees' | 'attendance' | 'tasks' | 'ledger' | 'purchaseOrders' | 'notifications' | 'stockMoves' | 'shifts' | 'accounts' | 'journals';
 const COLLS: Coll[] = ['products', 'partners', 'invoices', 'leads', 'employees', 'attendance', 'tasks', 'ledger', 'purchaseOrders', 'notifications', 'stockMoves', 'shifts', 'accounts', 'journals'];
 
+export type Role = 'owner' | 'manager' | 'accountant' | 'cashier' | 'warehouse' | 'sales';
+export interface OrgInfo { id: string; name: string; role: Role; }
+
+let activeOrg: string | null = null;
+export const setActiveOrg = (id: string | null) => { activeOrg = id; };
+export const getActiveOrg = () => activeOrg;
+
 export async function getSession() { return sb.auth.getSession(); }
 export async function getUser() { const { data } = await sb.auth.getUser(); return data.user; }
 export async function signUp(email: string, pw: string) { return sb.auth.signUp({ email, password: pw }); }
@@ -28,9 +35,9 @@ export async function loadAll(): Promise<DBData | null> {
   if (!user) return null;
   const out: any = { products: [], partners: [], invoices: [], leads: [], employees: [], attendance: [], tasks: [], ledger: [], purchaseOrders: [], notifications: [], stockMoves: [], shifts: [], accounts: [], journals: [], settings: null, meta: { version: 2 } };
   for (const c of COLLS) {
-    const { data, error } = await sb.from(`ns_${c}`).select('id, data');
+    const { data, error } = await sb.from(`ns_${c}`).select('id, data, org_id');
     if (error) throw new Error(error.message);
-    out[c] = (data ?? []).map((r: any) => ({ ...r.data, id: r.id }));
+    out[c] = (data ?? []).map((r: any) => ({ ...r.data, id: r.id, orgId: r.org_id ?? null }));
   }
   const { data: st } = await sb.from('ns_settings').select('data').eq('id', 'settings').maybeSingle();
   if (st?.data) out.settings = st.data as Settings;
@@ -47,7 +54,7 @@ export function pendingCount() { return queue.length; }
 
 async function rawUpsert(c: Coll, e: any): Promise<boolean> {
   const user = await getUser(); if (!user) return false;
-  const { error } = await sb.from(`ns_${c}`).upsert({ id: e.id, user_id: user.id, data: e });
+  const { error } = await sb.from(`ns_${c}`).upsert({ id: e.id, user_id: user.id, org_id: activeOrg, data: e });
   return !error;
 }
 async function rawDelete(c: Coll, id: string): Promise<boolean> {
@@ -109,4 +116,97 @@ export function mergeLocal(local: DBData, remote: DBData): DBData {
   }
   out.settings = remote.settings?.companyName ? remote.settings : local.settings;
   return out as DBData;
+}
+
+
+// ---- organizations & roles ----
+
+export async function loadOrgs(): Promise<OrgInfo[]> {
+  const user = await getUser(); if (!user) return [];
+  const { data: memberships, error } = await sb.from('ns_members').select('id, org_id, role');
+  if (error || !memberships?.length) return [];
+  const ids = memberships.map((m: any) => m.org_id);
+  const { data: orgs } = await sb.from('ns_orgs').select('id, name').in('id', ids);
+  return (orgs ?? []).map((o: any) => ({
+    id: o.id,
+    name: o.name,
+    role: (memberships.find((m: any) => m.org_id === o.id)?.role ?? 'sales') as Role,
+  }));
+}
+
+/** Personal org bootstrap — every cloud user gets one automatically. */
+export async function ensureOrg(preferredName: string): Promise<OrgInfo | null> {
+  const user = await getUser(); if (!user) return null;
+  const orgs = await loadOrgs();
+  if (orgs.length) return orgs[0];
+  const id = 'org_' + Math.random().toString(36).slice(2, 10);
+  const name = preferredName || (user.email ?? 'مؤسستي').split('@')[0];
+  const { error: e1 } = await sb.from('ns_orgs').insert({ id, name, owner_id: user.id });
+  if (e1) return null;
+  const { error: e2 } = await sb.from('ns_members').insert({
+    id: 'mem_' + Math.random().toString(36).slice(2, 10),
+    org_id: id, user_id: user.id, role: 'owner',
+  });
+  if (e2) return null;
+  return { id, name, role: 'owner' };
+}
+
+export async function loadMembers(): Promise<any[]> {
+  if (!activeOrg) return [];
+  const { data } = await sb.from('ns_members').select('id, user_id, role, created_at').eq('org_id', activeOrg);
+  return data ?? [];
+}
+
+export async function setMemberRole(memberId: string, role: Role): Promise<boolean> {
+  const { error } = await sb.from('ns_members').update({ role }).eq('id', memberId);
+  return !error;
+}
+
+export async function removeMember(memberId: string): Promise<boolean> {
+  const { error } = await sb.from('ns_members').delete().eq('id', memberId);
+  return !error;
+}
+
+export async function renameOrg(name: string): Promise<boolean> {
+  if (!activeOrg) return false;
+  const { error } = await sb.from('ns_orgs').update({ name }).eq('id', activeOrg);
+  return !error;
+}
+
+export async function createInvite(role: Role): Promise<string | null> {
+  if (!activeOrg) return null;
+  const code = Array.from({ length: 8 }, () => 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'[Math.floor(Math.random() * 32)]).join('');
+  const { error } = await sb.from('ns_invites').insert({
+    id: 'inv_' + Math.random().toString(36).slice(2, 10),
+    org_id: activeOrg, code, role,
+  });
+  return error ? null : code;
+}
+
+export async function listInvites(): Promise<any[]> {
+  if (!activeOrg) return [];
+  const { data } = await sb.from('ns_invites').select('id, code, role, used, expires_at, created_at')
+    .eq('org_id', activeOrg).order('created_at', { ascending: false });
+  return data ?? [];
+}
+
+export async function deleteInvite(id: string): Promise<boolean> {
+  const { error } = await sb.from('ns_invites').delete().eq('id', id);
+  return !error;
+}
+
+/** Join an organization using an invite code (RPC validates + inserts membership). */
+export async function joinOrg(code: string): Promise<string | null> {
+  const { data, error } = await sb.rpc('ns_join_org', { p_code: code.trim().toUpperCase() });
+  if (error || !data) return null;
+  return data as string;
+}
+
+/** One-time migration: attach org_id to legacy rows so the team can see them. */
+export async function migrateOrgIds(data: DBData): Promise<number> {
+  let n = 0;
+  for (const c of COLLS)
+    for (const e of (data as any)[c] ?? [])
+      if (!(e as any).orgId && activeOrg) { if (await rawUpsert(c, e)) n++; }
+  return n;
 }

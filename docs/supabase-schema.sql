@@ -14,5 +14,17 @@ BEGIN
   END LOOP;
 END $$;
 
+-- ===== Multi-tenant layer (v2.8.0) =====
+-- ns_orgs / ns_members / ns_invites + ns_join_org(code) RPC.
+-- Every ns_* data table gained an org_id column. Row visibility:
+--   SELECT: legacy own rows (org_id IS NULL AND user_id = auth.uid())
+--           OR any row of an org the user is a member of.
+--   INSERT/UPDATE: role-gated per table (owner/manager/accountant/
+--           cashier/warehouse/sales matrix).
+--   DELETE: owner+manager (products also warehouse); journals/accounts/
+--           ledger owner only — posted entries are never silently deleted.
+-- Invite flow: owner/manager create a code (7 days) -> the employee enters
+-- it on the Team page -> ns_join_org RPC validates and inserts membership.
+
 -- The client embeds the PUBLIC anon key only (safe by design thanks to RLS).
 -- The service_role key must never be used in the frontend.

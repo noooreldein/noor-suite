@@ -17,6 +17,7 @@ export const routes = [
   { path: 'bi', title: 'الذكاء والتوقعات' },
   { path: 'calendar', title: 'التقويم' },
   { path: 'settings', title: 'الإعدادات' },
+  { path: 'team', title: 'الفريق والأدوار' },
 ] as const;
 
 export type RoutePath = (typeof routes)[number]['path'];

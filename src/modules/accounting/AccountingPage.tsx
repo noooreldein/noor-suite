@@ -11,6 +11,9 @@ import { num } from '../../lib/format';
 import { fmtDate, today } from '../../lib/dates';
 import { download, toCSV } from '../../lib/csv';
 import { printHTML } from '../../lib/print';
+import { useOrg } from '../../org/Org';
+import { canDo, MANAGER_UP } from '../../lib/permissions';
+import type { Role } from '../../lib/permissions';
 import {
   Account, AccountType, Journal, JLine,
   DEFAULT_COA, TYPE_LABEL, CODES,
@@ -35,6 +38,8 @@ const SOURCE_LABEL: Record<string, string> = {
 
 export function AccountingPage() {
   const { data, add, update, remove, toast, settings } = useStore();
+  const { org } = useOrg();
+  const canDelete = canDo((org?.role ?? null) as Role | null, MANAGER_UP);
   const [tab, setTab] = useState<Tab>('journal');
   const [from, setFrom] = useState('');
   const [to, setTo] = useState('');
@@ -188,7 +193,7 @@ export function AccountingPage() {
                   <b key="b" className="mono">{a.isGroup ? '—' : num(row?.closing ?? 0)}</b>,
                   a.isGroup ? <span key="x" /> : <span key="x" className="row" style={{ gap: 6 }}>
                     <Button size="sm" variant="outline" onClick={() => setAcctForm(a)}>تعديل</Button>
-                    <Button size="sm" variant="danger" onClick={() => { remove('accounts', a.id); toast('تم حذف الحساب'); }}>حذف</Button>
+                    {canDelete && <Button size="sm" variant="danger" onClick={() => { remove('accounts', a.id); toast('تم حذف الحساب'); }}>حذف</Button>}
                   </span>,
                 ];
               }}

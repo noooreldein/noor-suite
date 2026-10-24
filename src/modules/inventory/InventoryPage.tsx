@@ -11,12 +11,17 @@ import { download, toCSV } from '../../lib/csv';
 import { ProductFormModal } from './ProductFormModal';
 import { StockAdjustModal } from './StockAdjustModal';
 import { today } from '../../lib/dates';
+import { useOrg } from '../../org/Org';
+import { canDo, MANAGER_UP } from '../../lib/permissions';
+import type { Role } from '../../lib/permissions';
 import { Modal } from '../../components/ui/Modal';
 
 const MOVE_LABELS: Record<string, string> = { sale: 'بيع', return: 'مرتجع', purchase: 'شراء', adjust: 'تسوية', receive: 'استلام' };
 
 export function InventoryPage() {
   const { data, remove, toast, update } = useStore();
+  const { org } = useOrg();
+  const canDelete = canDo((org?.role ?? null) as Role | null, MANAGER_UP);
   const [q, setQ] = useState('');
   const [lowOnly, setLowOnly] = useState(false);
   const [editing, setEditing] = useState<string | null>(null);
@@ -64,7 +69,7 @@ export function InventoryPage() {
             <div key="a" className="row">
               <Button size="sm" variant="outline" onClick={() => setAdjusting(p.id)}>مخزون +</Button>
               <Button size="sm" variant="outline" onClick={() => setEditing(p.id)}>تعديل</Button>
-              <Button size="sm" variant="danger" onClick={() => setConfirmId(p.id)}>حذف</Button>
+              {canDelete && <Button size="sm" variant="danger" onClick={() => setConfirmId(p.id)}>حذف</Button>}
             </div>,
           ]} />
       </div>

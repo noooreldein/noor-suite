@@ -2,6 +2,9 @@ import { useState } from 'react';
 import { routes, RoutePath } from '../../router/router';
 import { useStore } from '../../store/AppStore';
 import { useT } from '../../i18n/I18n';
+import { useOrg } from '../../org/Org';
+import { canAccess, ROLE_LABEL } from '../../lib/permissions';
+import type { Role } from '../../lib/permissions';
 
 interface Props { route: RoutePath; onNavigate: (p: RoutePath) => void; }
 
@@ -16,13 +19,15 @@ const groups: { label: string; items: RoutePath[] }[] = [
   { label: 'المبيعات', items: ['sales', 'crm', 'partners'] },
   { label: 'المخازن', items: ['inventory', 'purchaseOrders', 'purchases'] },
   { label: 'الإدارة', items: ['hr', 'projects', 'accounting'] },
-  { label: 'التحليلات', items: ['reports', 'bi', 'calendar', 'settings'] },
+  { label: 'التحليلات', items: ['reports', 'bi', 'calendar', 'settings', 'team'] },
 ];
 
 export function Sidebar({ route, onNavigate }: Props) {
   const [open, setOpen] = useState(false);
   const { settings, setSettings } = useStore();
   const t = useT();
+  const { org } = useOrg();
+  const role = (org?.role ?? null) as Role | null;
   return (
     <>
       <aside className={`sidebar ${open ? 'open' : ''}`}>
@@ -34,18 +39,28 @@ export function Sidebar({ route, onNavigate }: Props) {
           </div>
         </div>
         <nav className="side-links" onClick={() => setOpen(false)}>
-          {groups.map(g => (
-            <div key={g.label}>
-              <div className="side-group">{g.label}</div>
-              {g.items.map(p => (
-                <a key={p} className={`side-link ${route === p ? 'active' : ''}`} onClick={() => onNavigate(p)}>
-                  <span style={{ width: 18, textAlign: 'center' }}>{icons[p]}</span>
-                  {routes.find(r => r.path === p)!.title}
-                </a>
-              ))}
-            </div>
-          ))}
+          {groups.map(g => {
+            const items = g.items.filter(p => canAccess(role, p));
+            if (!items.length) return null;
+            return (
+              <div key={g.label}>
+                <div className="side-group">{g.label}</div>
+                {items.map(p => (
+                  <a key={p} className={`side-link ${route === p ? 'active' : ''}`} onClick={() => onNavigate(p)}>
+                    <span style={{ width: 18, textAlign: 'center' }}>{icons[p] ?? '☺'}</span>
+                    {routes.find(r => r.path === p)!.title}
+                  </a>
+                ))}
+              </div>
+            );
+          })}
         </nav>
+        {org && (
+          <div style={{ padding: '6px 10px 10px', borderTop: '1px solid var(--line)', fontSize: 11.5, color: 'var(--soft)' }}>
+            <div style={{ fontWeight: 700, color: 'var(--ink)', fontSize: 12.5 }}>{org.name}</div>
+            <div>{ROLE_LABEL[role as Role]} {role === 'owner' ? '👑' : ''}</div>
+          </div>
+        )}
         <div style={{ display: 'flex', gap: 8, padding: '0 6px' }}>
           <button className="btn btn-sm btn-outline grow" onClick={() => setSettings({ theme: settings.theme === 'dark' ? 'light' : 'dark' })}>
             {settings.theme === 'dark' ? '☀' : '☾'} {t('dark_mode')}
