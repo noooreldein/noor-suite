@@ -7,6 +7,8 @@ import { useStore } from '../../store/AppStore';
 import { Button } from '../../components/ui/Button';
 import { Tabs } from '../../components/ui/Tabs';
 import { download } from '../../lib/csv';
+import { readSyncLog, clearSyncLog, logSync } from '../../lib/sync';
+import * as db from '../../lib/db';
 
 function CloudStatus() {
   const [email, setEmail] = useState<string | null>(null);
@@ -93,6 +95,7 @@ export function SettingsPage() {
             </p>
             <div className="row">
               <Button onClick={() => { download(`noor-suite-backup-${new Date().toISOString().slice(0, 10)}.json`, exportAll(), 'application/json'); toast('تم تصدير النسخة ✓'); }}>⬇ تصدير</Button>
+              <CloudBackups />
               <Button variant="outline" onClick={() => fileRef.current?.click()}>⬆ استيراد</Button>
               <div className="card" style={{ marginTop: 16 }}>
               <div className="card-head"><h3>الحساب السحابي</h3></div>
@@ -145,5 +148,91 @@ export function SettingsPage() {
         </div>
       )}
     </>
+  );
+}
+
+
+/** Cloud backups — automatic daily snapshots + manual create/restore/delete. */
+function CloudBackups() {
+  const { exportAll, ingest, toast } = useStore();
+  const [items, setItems] = useState<backend.BackupMeta[]>([]);
+  const [email, setEmail] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const reload = () => backend.listBackups().then(setItems).catch(() => {});
+  useEffect(() => { backend.getUser().then(u => setEmail(u?.email ?? null)).then(reload); }, []);
+
+  if (!email) return null;
+
+  const create = async () => {
+    setBusy(true);
+    const ok = await backend.createBackup(exportAll());
+    setBusy(false);
+    toast(ok ? 'اتعملت نسخة سحابية ✓' : 'تعذّر عمل النسخة', ok ? 'ok' : 'err');
+    logSync({ at: new Date().toISOString(), kind: 'backup', msg: 'نسخة سحابية يدوية' });
+    reload();
+  };
+
+  const restore = async (id: string) => {
+    if (!confirm('استعادة النسخة؟ البيانات الحالية هتتستبدل بمحتواها.')) return;
+    setBusy(true);
+    const bk = await backend.fetchBackup(id);
+    setBusy(false);
+    if (!bk?.data) return toast('تعذّر جلب النسخة', 'err');
+    try {
+      const parsed = db.normalize(typeof bk.data === 'string' ? JSON.parse(bk.data) : bk.data);
+      ingest(parsed);
+      await backend.migrateLocal(parsed); // re-push everything to the cloud
+      logSync({ at: new Date().toISOString(), kind: 'restore', msg: `استعادة نسخة ${id.slice(3, 12)}` });
+      toast('تمت الاستعادة ✓ — هيتجدد التطبيق');
+      setTimeout(() => location.reload(), 900);
+    } catch { toast('النسخة غير صالحة', 'err'); }
+  };
+
+  return (
+    <div className="card" style={{ marginTop: 16 }}>
+      <div className="card-head"><h3>النسخ الاحتياطية السحابية</h3></div>
+      <div className="card-body">
+        <p style={{ fontSize: 12.5, color: 'var(--soft)' }}>نسخة تلقائية بتتعمل كل 24 ساعة أول ما النظام يتفتح (من أي جهاز) — آخر 7 نسخ محفوظة.</p>
+        <div className="row" style={{ marginBottom: 10 }}>
+          <Button disabled={busy} onClick={create}>+ نسخة الآن</Button>
+        </div>
+        {!items.length && <p style={{ fontSize: 12.5, color: 'var(--soft)' }}>مفيش نسخ لسه.</p>}
+        {items.map(b => (
+          <div key={b.id} className="row" style={{ justifyContent: 'space-between', padding: '6px 0', borderBottom: '1px solid var(--line)' }}>
+            <span style={{ fontSize: 13 }}>{new Date(b.created_at).toLocaleString('ar-EG')} · {(b.size / 1024).toFixed(1)} KB</span>
+            <span className="row">
+              <Button variant="outline" disabled={busy} onClick={() => restore(b.id)}>استعادة</Button>
+              <Button variant="outline" disabled={busy} onClick={() => { backend.fetchBackup(b.id).then(r => { if (r?.data) download(`noor-cloud-${b.id}.json`, JSON.stringify(r.data, null, 2), 'application/json'); }); }}>تحميل</Button>
+              <Button variant="danger" disabled={busy} onClick={() => { if (confirm('حذف النسخة؟')) { backend.deleteBackup(b.id).then(reload); } }}>حذف</Button>
+            </span>
+          </div>
+        ))}
+        <SyncLogCard />
+      </div>
+    </div>
+  );
+}
+
+/** Sync log — conflicts & backup history, per device. */
+function SyncLogCard() {
+  const [entries, setEntries] = useState(readSyncLog());
+  return (
+    <div className="card" style={{ marginTop: 16 }}>
+      <div className="card-head"><h3>سجل المزامنة</h3></div>
+      <div className="card-body">
+        {!entries.length && <p style={{ fontSize: 12.5, color: 'var(--soft)' }}>مفيش تعارضات أو أحداث مزامنة على الجهاز ده.</p>}
+        {entries.slice(0, 12).map((e, i) => (
+          <div key={i} className="row" style={{ gap: 8, padding: '5px 0', borderBottom: '1px solid var(--line)', fontSize: 12.5 }}>
+            <Badge tone={e.kind === 'conflict' ? 'amber' : e.kind === 'restore' ? 'blue' : 'green'}>
+              {e.kind === 'conflict' ? 'تعارض' : e.kind === 'restore' ? 'استعادة' : e.kind === 'backup' ? 'نسخة' : 'معلومة'}
+            </Badge>
+            <span style={{ flex: 1 }}>{e.msg}</span>
+            <span style={{ color: 'var(--soft)', fontSize: 11 }}>{new Date(e.at).toLocaleTimeString('ar-EG')}</span>
+          </div>
+        ))}
+        {!!entries.length && <Button variant="outline" onClick={() => { clearSyncLog(); setEntries([]); }}>تفريغ السجل</Button>}
+      </div>
+    </div>
   );
 }

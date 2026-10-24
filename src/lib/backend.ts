@@ -41,7 +41,7 @@ export async function loadAll(): Promise<DBData | null> {
   if (!user) return null;
   const out: any = { products: [], partners: [], invoices: [], leads: [], employees: [], attendance: [], tasks: [], ledger: [], purchaseOrders: [], notifications: [], stockMoves: [], shifts: [], accounts: [], journals: [], settings: null, meta: { version: 2 } };
   for (const c of COLLS) {
-    const { data, error } = await sb.from(tbl(c)).select('id, data, org_id');
+    const { data, error } = await sb.from(tbl(c)).select('id, data, org_id, updated_at');
     if (error) throw new Error(error.message);
     out[c] = (data ?? []).map((r: any) => ({ ...r.data, id: r.id, orgId: r.org_id ?? null }));
   }
@@ -97,6 +97,53 @@ export async function saveSettings(s: Settings | null): Promise<boolean> {
   const { error } = await sb.from('ns_settings').upsert({ id: `settings_${user.id}`, user_id: user.id, data: s });
   return !error;
 }
+
+// ===== cloud backups (ns_backups) =====
+const BK_MAX = 7;
+
+/** Create a cloud snapshot for the active org/user; keeps the last BK_MAX. */
+export async function createBackup(payload: string): Promise<boolean> {
+  const user = await getUser(); if (!user) return false;
+  const { error } = await sb.from('ns_backups').insert({
+    id: 'bk_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+    org_id: activeOrg, user_id: user.id,
+    data: JSON.parse(payload), size: payload.length,
+  });
+  if (error) return false;
+  // trim old snapshots beyond BK_MAX
+  const { data: all } = await sb.from('ns_backups').select('id').order('created_at', { ascending: false }).limit(BK_MAX + 5);
+  if (all && all.length > BK_MAX) {
+    const extra = all.slice(BK_MAX).map((r: any) => r.id);
+    await sb.from('ns_backups').delete().in('id', extra);
+  }
+  return true;
+}
+
+export interface BackupMeta { id: string; created_at: string; size: number }
+
+export async function listBackups(): Promise<BackupMeta[]> {
+  const { data } = await sb.from('ns_backups').select('id, size, created_at').order('created_at', { ascending: false }).limit(20);
+  return (data ?? []) as BackupMeta[];
+}
+
+export async function fetchBackup(id: string): Promise<any | null> {
+  const { data } = await sb.from('ns_backups').select('data').eq('id', id).maybeSingle();
+  return data;
+}
+
+export async function deleteBackup(id: string): Promise<boolean> {
+  const { error } = await sb.from('ns_backups').delete().eq('id', id);
+  return !error;
+}
+
+export async function latestBackupAt(): Promise<string | null> {
+  const { data } = await sb.from('ns_backups').select('created_at').order('created_at', { ascending: false }).limit(1).maybeSingle();
+  return data?.created_at ?? null;
+}
+
+// ===== per-row remote updated_at, captured on each loadAll (conflict detection) =====
+let lastMeta: Record<string, Record<string, string>> = {};
+export const getLoadMeta = () => lastMeta;
 
 /** Retry all queued ops. Returns the number still failing. */
 export async function flushQueue(): Promise<number> {

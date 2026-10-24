@@ -26,6 +26,7 @@ import { Onboarding } from './components/system/Onboarding';
 import { LockScreen } from './components/system/LockScreen';
 import { AuthScreen } from './components/system/AuthScreen';
 import * as backend from './lib/backend';
+import { detectConflicts, logSync } from './lib/sync';
 import { ErrorBoundary } from './components/system/ErrorBoundary';
 
 function Toasts() {
@@ -77,6 +78,20 @@ function Gate() {
           if (remote) {
             await refreshOrg();
             await backend.migrateOrgIds(remote);
+            // device-sync conflict detection: rows whose server copy changed after our last local edit
+            const conflicts = detectConflicts(data, remote, backend.getLoadMeta());
+            if (conflicts.length) {
+              conflicts.forEach(c => logSync({ at: c.at, kind: 'conflict', msg: `سجل في «${c.coll}» اتعدّل من جهاز آخر — تم اعتماد نسخة السحابة (${c.id.slice(0, 10)}…)` }));
+              toast(`${conflicts.length} سجل اتحدّث من جهاز تاني — راجع سجل المزامنة في الإعدادات`);
+            }
+            // automatic daily cloud backup (any device counts)
+            try {
+              const last = await backend.latestBackupAt();
+              if (!last || Date.now() - new Date(last).getTime() > 24 * 3600 * 1000) {
+                const payload = JSON.stringify(remote);
+                if (await backend.createBackup(payload)) logSync({ at: new Date().toISOString(), kind: 'backup', msg: 'نسخة احتياطية سحابية تلقائية اتعملت' });
+              }
+            } catch { /* non-fatal */ }
             const cloudEmpty = !remote.settings?.companyName;
             if (cloudEmpty && data.settings?.companyName) {
               const rep = await backend.migrateLocal(data);
