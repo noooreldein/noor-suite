@@ -1,3 +1,4 @@
+import { bstock } from '../../lib/branches';
 /** Point of Sale — barcode-ready grid, cashier shifts, cart panel. */
 import { useMemo, useRef, useState } from 'react';
 import { useStore } from '../../store/AppStore';
@@ -9,7 +10,7 @@ import { num, initials } from '../../lib/format';
 import { printHTML } from '../../lib/print';
 
 export function PosPage() {
-  const { data, settings, add, update, toast } = useStore();
+  const { data, settings, add, update, toast, branch } = useStore();
   const [q, setQ] = useState('');
   const [cart, setCart] = useState<Record<string, number>>({});
   const [code, setCode] = useState('');
@@ -44,7 +45,7 @@ export function PosPage() {
     const p = data.products.find(x => x.sku.toLowerCase() === v || (x.barcode ?? '').toString().toLowerCase() === v);
     setCode('');
     if (!p) return toast(`لا يوجد صنف بالكود "${v}"`, 'err');
-    if (p.stock === 0) return toast(`${p.name} نفد من المخزون`, 'err');
+    if (bstock(p, branch) === 0) return toast(`${p.name} نفد بفرعك الحالي`, 'err');
     addToCart(p.id);
     toast(`+1 ${p.name}`);
     codeRef.current?.focus();
@@ -130,10 +131,10 @@ export function PosPage() {
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: 12, marginTop: 6 }}>
           {products.map(p => (
             <button key={p.id} className="card" style={{ padding: 14, textAlign: 'start', border: '1px solid var(--line)', background: 'var(--card)', color: 'var(--ink)' }}
-              disabled={p.stock === 0} onClick={() => addToCart(p.id)}>
+              disabled={bstock(p, branch) === 0} onClick={() => addToCart(p.id)}>
               <div className="row" style={{ justifyContent: 'space-between' }}>
                 <span style={{ width: 34, height: 34, borderRadius: 9, background: 'var(--primary-soft)', color: 'var(--primary)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700 }}>{initials(p.name)}</span>
-                {p.stock === 0 ? <Badge tone="red">نفد</Badge> : p.stock <= p.minStock ? <Badge tone="amber">{p.stock}</Badge> : <Badge tone="green">{p.stock}</Badge>}
+                {(() => { const bs = bstock(p, branch); return bs === 0 ? <Badge tone="red">نفد بفرعك</Badge> : bs <= p.minStock ? <Badge tone="amber">{bs}</Badge> : <Badge tone="green">{bs}</Badge>; })()}
               </div>
               <div style={{ fontWeight: 600, fontSize: 13, marginTop: 8 }}>{p.name}</div>
               <div className="mono" style={{ fontSize: 12, color: 'var(--primary)' }}>{num(p.price)} ج.م</div>
