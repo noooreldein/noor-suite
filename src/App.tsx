@@ -87,7 +87,10 @@ function Gate() {
             // automatic daily cloud backup (any device counts)
             try {
               const last = await backend.latestBackupAt();
-              if (!last || Date.now() - new Date(last).getTime() > 24 * 3600 * 1000) {
+              const hasData = Object.keys(backend.getLoadMeta()).some(c => Object.keys(backend.getLoadMeta()[c] ?? {}).length);
+              // skip the very first (empty) load; also refresh if the newest snapshot is empty
+              const stale = !last || last.size < 500 || Date.now() - new Date(last.created_at).getTime() > 24 * 3600 * 1000;
+              if (hasData && stale) {
                 const payload = JSON.stringify(remote);
                 if (await backend.createBackup(payload)) logSync({ at: new Date().toISOString(), kind: 'backup', msg: 'نسخة احتياطية سحابية تلقائية اتعملت' });
               }

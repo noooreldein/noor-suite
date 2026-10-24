@@ -136,9 +136,9 @@ export async function deleteBackup(id: string): Promise<boolean> {
   return !error;
 }
 
-export async function latestBackupAt(): Promise<string | null> {
-  const { data } = await sb.from('ns_backups').select('created_at').order('created_at', { ascending: false }).limit(1).maybeSingle();
-  return data?.created_at ?? null;
+export async function latestBackupAt(): Promise<{ created_at: string; size: number } | null> {
+  const { data } = await sb.from('ns_backups').select('created_at, size').order('created_at', { ascending: false }).limit(1).maybeSingle();
+  return data ?? null;
 }
 
 // ===== per-row remote updated_at, captured on each loadAll (conflict detection) =====
