@@ -3,7 +3,7 @@ export type Role = 'owner' | 'manager' | 'accountant' | 'cashier' | 'warehouse' 
 
 export const ROLE_LABEL: Record<Role, string> = {
   owner: 'المالك', manager: 'المدير', accountant: 'المحاسب',
-  cashier: 'الكاشير', warehouse: 'أمين المخزن', sales: 'موظف مبيعات',
+  cashier: 'كاشير', warehouse: 'أمين المخزن', sales: 'موظف مبيعات',
 };
 
 export const ALL_ROLES: Role[] = ['owner', 'manager', 'accountant', 'cashier', 'warehouse', 'sales'];

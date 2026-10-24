@@ -64,7 +64,7 @@ export function Onboarding() {
         </div>
 
         <button className="btn btn-primary onb-cta" disabled={busy || (!name.trim())} onClick={() => finish(false)}>
-          {lang === 'ar' ? 'إنشاء النظام وابدأ الشغل' : 'Create and start'}
+          {lang === 'ar' ? 'إنشاء النظام والبدء' : 'Create and start'}
         </button>
         <button className="onb-demo" disabled={busy} onClick={() => { setSettings({ companyName: 'مؤسسة نور التجارية', currency: 'ج.م', vatRate: 14, lang, theme: 'light' } as any); reseed(); }}>
           {lang === 'ar' ? 'استكشاف سريع ببيانات تجريبية' : 'Explore with demo data'}

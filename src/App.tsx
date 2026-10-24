@@ -79,10 +79,11 @@ function Gate() {
             await refreshOrg();
             await backend.migrateOrgIds(remote);
             // device-sync conflict detection: rows whose server copy changed after our last local edit
+            const AR_COLL: Record<string, string> = { products: 'المنتجات', partners: 'الجهات', invoices: 'الفواتير', leads: 'الفرص', employees: 'الموظفين', attendance: 'الحضور', tasks: 'المهام', ledger: 'دفتر الحسابات', purchaseOrders: 'أوامر الشراء', notifications: 'التنبيهات', stockMoves: 'حركات المخزون', shifts: 'الورديات', accounts: 'الحسابات', journals: 'القيود', branches: 'الفروع' };
             const conflicts = detectConflicts(data, remote, backend.getLoadMeta());
             if (conflicts.length) {
-              conflicts.forEach(c => logSync({ at: c.at, kind: 'conflict', msg: `سجل في «${c.coll}» اتعدّل من جهاز آخر — تم اعتماد نسخة السحابة (${c.id.slice(0, 10)}…)` }));
-              toast(`${conflicts.length} سجل اتحدّث من جهاز تاني — راجع سجل المزامنة في الإعدادات`);
+              conflicts.forEach(c => logSync({ at: c.at, kind: 'conflict', msg: `تم تحديث سجل في «${AR_COLL[c.coll] ?? c.coll}» من جهاز آخر — تم اعتماد نسخة السحابة` }));
+              toast(`${conflicts.length} سجل تم تحديثه من جهاز آخر — راجع سجل المزامنة في الإعدادات`);
             }
             // automatic daily cloud backup (any device counts)
             try {

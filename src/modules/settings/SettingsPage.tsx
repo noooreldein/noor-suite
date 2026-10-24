@@ -174,7 +174,7 @@ function CloudBackups() {
   };
 
   const restore = async (id: string) => {
-    if (!confirm('استعادة النسخة؟ البيانات الحالية هتتستبدل بمحتواها.')) return;
+    if (!confirm('استعادة هذه النسخة؟ سيتم استبدال البيانات الحالية بمحتواها.')) return;
     setBusy(true);
     const bk = await backend.fetchBackup(id);
     setBusy(false);
@@ -193,11 +193,11 @@ function CloudBackups() {
     <div className="card" style={{ marginTop: 16 }}>
       <div className="card-head"><h3>النسخ الاحتياطية السحابية</h3></div>
       <div className="card-body">
-        <p style={{ fontSize: 12.5, color: 'var(--soft)' }}>نسخة تلقائية بتتعمل كل 24 ساعة أول ما النظام يتفتح (من أي جهاز) — آخر 7 نسخ محفوظة.</p>
+        <p style={{ fontSize: 12.5, color: 'var(--soft)' }}>تُنشأ نسخة تلقائية كل 24 ساعة عند فتح النظام من أي جهاز — ويتم الاحتفاظ بآخر 7 نسخ.</p>
         <div className="row" style={{ marginBottom: 10 }}>
           <Button disabled={busy} onClick={create}>+ نسخة الآن</Button>
         </div>
-        {!items.length && <p style={{ fontSize: 12.5, color: 'var(--soft)' }}>مفيش نسخ لسه.</p>}
+        {!items.length && <p style={{ fontSize: 12.5, color: 'var(--soft)' }}>لا توجد نسخ بعد.</p>}
         {items.map(b => (
           <div key={b.id} className="row" style={{ justifyContent: 'space-between', padding: '6px 0', borderBottom: '1px solid var(--line)' }}>
             <span style={{ fontSize: 13 }}>{new Date(b.created_at).toLocaleString('ar-EG')} · {(b.size / 1024).toFixed(1)} KB</span>
@@ -221,7 +221,7 @@ function SyncLogCard() {
     <div className="card" style={{ marginTop: 16 }}>
       <div className="card-head"><h3>سجل المزامنة</h3></div>
       <div className="card-body">
-        {!entries.length && <p style={{ fontSize: 12.5, color: 'var(--soft)' }}>مفيش تعارضات أو أحداث مزامنة على الجهاز ده.</p>}
+        {!entries.length && <p style={{ fontSize: 12.5, color: 'var(--soft)' }}>لا توجد تعارضات أو أحداث مزامنة على هذا الجهاز.</p>}
         {entries.slice(0, 12).map((e, i) => (
           <div key={i} className="row" style={{ gap: 8, padding: '5px 0', borderBottom: '1px solid var(--line)', fontSize: 12.5 }}>
             <Badge tone={e.kind === 'conflict' ? 'amber' : e.kind === 'restore' ? 'blue' : 'green'}>

@@ -46,7 +46,7 @@ export function Client360Modal({ id, onClose }: { id: string; onClose: () => voi
         </a>
         {outstanding > 0 && (
           <a className="btn btn-sm btn-outline" target="_blank" rel="noreferrer"
-            href={wa(`مرحباً ${p.name}، نود تذكير مهذب بوجود فاتورة مستحقة بقيمة ${num(outstanding)} (${data.settings?.currency ?? ''}) بتاريخ ${unpaid[0].date}. شكراً لتعاونك!`)}>
+            href={wa(`مرحباً ${p.name}، نود تذكيركم بوجود فاتورة مستحقة بقيمة ${num(outstanding)} ${data.settings?.currency ?? ''} بتاريخ ${unpaid[0].date}. شكراً لتعاونكم.`)}>
             تذكير بمستحقات
           </a>
         )}

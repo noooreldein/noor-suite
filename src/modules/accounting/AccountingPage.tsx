@@ -76,7 +76,7 @@ export function AccountingPage() {
     if (!form) return;
     const lines = form.lines.filter(l => l.code && (l.debit > 0 || l.credit > 0));
     if (lines.length < 2) return toast('أدخل طرفين على الأقل بمبالغ', 'err');
-    if (!isBalanced(lines)) return toast('القيد غير متوازن — إجمالي المدين لازم يساوي الدائن', 'err');
+    if (!isBalanced(lines)) return toast('القيد غير متوازن — يجب أن يساوي إجمالي المدين إجمالي الدائن', 'err');
     add('journals', { date: form.date, note: form.note || 'قيد يدوي', source: 'manual', lines });
     toast('تم تسجيل القيد ✓');
     setForm(null);
@@ -173,7 +173,7 @@ export function AccountingPage() {
                   </span>,
                 ];
               }}
-              empty="لا توجد قيود بعد — القيود بتتسجل تلقائياً مع كل عملية بيع وشراء ومرتجع" />
+              empty="لا توجد قيود بعد — تُسجَّل القيود تلقائياً مع كل عملية بيع أو شراء أو مرتجع" />
           </div>
         </div>
       )}

@@ -45,7 +45,7 @@ export function PosPage() {
     const p = data.products.find(x => x.sku.toLowerCase() === v || (x.barcode ?? '').toString().toLowerCase() === v);
     setCode('');
     if (!p) return toast(`لا يوجد صنف بالكود "${v}"`, 'err');
-    if (bstock(p, branch) === 0) return toast(`${p.name} نفد بفرعك الحالي`, 'err');
+    if (bstock(p, branch) === 0) return toast(`${p.name} نفد في الفرع الحالي`, 'err');
     addToCart(p.id);
     toast(`+1 ${p.name}`);
     codeRef.current?.focus();
@@ -71,7 +71,7 @@ export function PosPage() {
   const openShift = () => {
     add('shifts', { openedAt: new Date().toISOString(), openingCash, closedAt: null });
     setShiftModal(null);
-    toast('تم فتح الوردية — الب ماشي الله ✓');
+    toast('تم فتح الوردية بنجاح ✓');
   };
 
   const shiftSales = useMemo(() => activeShift ? data.invoices.filter((i: any) => i.shiftId === activeShift.id) : [], [data.invoices, activeShift]);
@@ -134,7 +134,7 @@ export function PosPage() {
               disabled={bstock(p, branch) === 0} onClick={() => addToCart(p.id)}>
               <div className="row" style={{ justifyContent: 'space-between' }}>
                 <span style={{ width: 34, height: 34, borderRadius: 9, background: 'var(--primary-soft)', color: 'var(--primary)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700 }}>{initials(p.name)}</span>
-                {(() => { const bs = bstock(p, branch); return bs === 0 ? <Badge tone="red">نفد بفرعك</Badge> : bs <= p.minStock ? <Badge tone="amber">{bs}</Badge> : <Badge tone="green">{bs}</Badge>; })()}
+                {(() => { const bs = bstock(p, branch); return bs === 0 ? <Badge tone="red">نفد في الفرع</Badge> : bs <= p.minStock ? <Badge tone="amber">{bs}</Badge> : <Badge tone="green">{bs}</Badge>; })()}
               </div>
               <div style={{ fontWeight: 600, fontSize: 13, marginTop: 8 }}>{p.name}</div>
               <div className="mono" style={{ fontSize: 12, color: 'var(--primary)' }}>{num(p.price)} ج.م</div>
@@ -148,7 +148,7 @@ export function PosPage() {
 
       {shiftModal === 'open' && (
         <Modal title="فتح وردية كاشير" onClose={() => setShiftModal(null)} width={420}>
-          <p style={{ color: 'var(--soft)', fontSize: 13 }}>افتح وردية قبل البدء في البيع — كل فواتير POS بتتسجل على الوردية.</p>
+          <p style={{ color: 'var(--soft)', fontSize: 13 }}>افتح وردية قبل بدء البيع — تُسجَّل جميع فواتير نقطة البيع على الوردية.</p>
           <label className="field">النقدية في بداية الوردية (الدرج)</label>
           <input type="number" min={0} value={openingCash} onChange={e => setOpeningCash(Number(e.target.value) || 0)} />
           <div className="modal-actions">

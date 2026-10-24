@@ -41,7 +41,7 @@ export function DashboardPage() {
     <div className="card empty-state">
       <div className="es-icon">🗂️</div>
       <h3>نظامك جاهز — ابدأ أول خطوة</h3>
-      <p>أضف منتجاتك وعملاءك، واصدر أول فاتورة — كل التقارير هتتولد تلقائياً من بياناتك الفعلية.</p>
+      <p>أضف منتجاتك وعملاءك وأصدر أول فاتورة — تُنشأ جميع التقارير تلقائياً من بياناتك الفعلية.</p>
       <div style={{ display: 'flex', gap: 10, justifyContent: 'center', flexWrap: 'wrap' }}>
         <button className="btn btn-primary" onClick={() => navigate('inventory')}>إضافة منتجات</button>
         <button className="btn" style={{ border: '1px solid var(--line)' }} onClick={() => navigate('partners')}>إضافة عملاء وموردين</button>

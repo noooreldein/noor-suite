@@ -41,7 +41,7 @@ export function BiPage() {
   const forecastSeries = useMemo(() => {
     let cum = 0;
     return lastMonths(6).map(m => ({ label: monthName(m), value: 0 })).concat(
-      lastMonths(3).map((m, i) => { cum += netFlow; return { label: `توقع +${i + 1}ش`, value: cum }; }));
+      lastMonths(3).map((m, i) => { cum += netFlow; return { label: `توقع شهر ${i + 1}`, value: cum }; }));
   }, [netFlow]);
 
   /* ===== stock needs: monthly sold per product vs stock + minStock ===== */
@@ -97,23 +97,23 @@ export function BiPage() {
   const ask = () => {
     const s = q.trim();
     if (!s) return;
-    let a = 'مش فاهم السؤال — جرّب: "أكتر منتج مبيعاً"، "مين متأخر في السداد"، "إيه توقع الشهر الجاي"، "المنتجات اللي هتخلص"';
+    let a = 'لم أفهم السؤال — جرّب: "أكثر منتج مبيعاً؟" أو "من المتأخر في السداد؟" أو "ما توقعات الشهر القادم؟"';
     const has = (...words: string[]) => words.some(w => s.includes(w));
-    if (has('مبيعاً', 'مبيعا', 'الأكثر', 'اكتر', 'أكثر')) {
+    if (has('مبيعاً', 'مبيعا', 'الأكثر', 'اكتر', 'أكثر', 'مبيعات', 'مبيع')) {
       const top = profitability[0];
-      a = top ? `أكتر منتج مبيعاً وربحاً: ${top.name} — ${top.qty} وحدة بربح ${num(top.profit)} جنيه.` : 'لسه مفيش مبيعات مسجلة.';
-    } else if (has('متأخر', 'مديون', 'مستحق', 'السداد')) {
+      a = top ? `أكثر منتج مبيعاً وربحاً: ${top.name} — بيع ${top.qty} وحدة بربح ${num(top.profit)} جنيه.` : 'لا توجد مبيعات مسجلة بعد.';
+    } else if (has('متأخر', 'مديون', 'مستحق', 'السداد', 'ديون', 'تحصيل')) {
       a = latePayers.length
-        ? latePayers.slice(0, 3).map(r => `${r.name}: ${num(r.amount)} جنيه متأخرة ${r.oldest} يوم`).join(' — ')
-        : 'مفيش مستحقات متأخرة، كل الفواتير متسددة 👌';
+        ? latePayers.slice(0, 3).map(r => `${r.name}: ${num(r.amount)} جنيه متأخرة بمقدار ${r.oldest} يوم`).join(' — ')
+        : 'لا توجد مستحقات متأخرة — جميع الفواتير مسددة.';
     } else if (has('توقع', 'الشهر', 'قادم', 'الجاي', 'مستقبل')) {
-      a = `متوسط مبيعاتك الشهري ${num(monthlyAvg)} جنيه والمشتريات ${num(purchasesMonthly)} — الصافي المتوقع ${netFlow >= 0 ? '+' : ''}${num(netFlow)} جنيه شهرياً، بالإضافة لمستحقات قيمة ${num(outstanding)} لو اتحصلت.`;
-    } else if (has('هتخلص', 'مخزون', 'مخازن', 'ينتهي', 'نواقص')) {
+      a = `متوسط مبيعاتك الشهري ${num(monthlyAvg)} جنيه والمشتريات ${num(purchasesMonthly)} جنيه — الصافي المتوقع ${netFlow >= 0 ? '+' : ''}${num(netFlow)} جنيه شهرياً، إضافة إلى مستحقات قيمتها ${num(outstanding)} جنيه إذا تم تحصيلها.`;
+    } else if (has('هتخلص', 'مخزون', 'مخازن', 'ينتهي', 'نواقص', 'تنفد', 'نفد', 'ناقص')) {
       a = stockNeeds.length
-        ? `${stockNeeds.length} منتج محتاج إعادة طلب: ${stockNeeds.slice(0, 3).map(r => `${r.p.name} (${r.p.stock} ${r.p.unit})`).join('، ')}`
-        : 'المخزون في حالة جيدة، مفيش نواقص متوقعة.';
+        ? `${stockNeeds.length} منتج يحتاج إعادة طلب: ${stockNeeds.slice(0, 3).map(r => `${r.p.name} (${r.p.stock} ${r.p.unit})`).join('، ')}`
+        : 'المخزون في حالة جيدة — لا نواقص متوقعة.';
     } else if (has('ربح', 'هامش')) {
-      a = profitability.slice(0, 3).map(r => `${r.name}: ربح ${num(r.profit)}`).join(' — ') || 'مفيش بيانات ربح بعد.';
+      a = profitability.slice(0, 3).map(r => `${r.name}: ربح ${num(r.profit)}`).join(' — ') || 'لا توجد بيانات ربح بعد.';
     }
     setAnswer(a);
   };
@@ -124,7 +124,7 @@ export function BiPage() {
         <StatCard label="متوسط المبيعات الشهري" value={num(monthlyAvg)} sub="جنيه" tone="primary" />
         <StatCard label="التدفق الصافي المتوقع" value={`${netFlow >= 0 ? '+' : ''}${num(netFlow)}`} sub="شهرياً" tone={netFlow >= 0 ? 'green' : 'red'} />
         <StatCard label="مستحقات لم تُحصل" value={num(outstanding)} sub="جنيه" tone="amber" />
-        <StatCard label="منتجات محتاجة إعادة طلب" value={stockNeeds.length} tone={stockNeeds.length ? 'red' : 'green'} />
+        <StatCard label="منتجات تحتاج إعادة طلب" value={stockNeeds.length} tone={stockNeeds.length ? 'red' : 'green'} />
       </div>
 
       <div className="toolbar">
@@ -138,7 +138,7 @@ export function BiPage() {
           <div className="row" style={{ gap: 8 }}>
             <input style={{ flex: 1 }} value={q} onChange={e => setQ(e.target.value)}
               onKeyDown={e => e.key === 'Enter' && ask()}
-              placeholder='مثال: "أكتر منتج مبيعاً؟" — "مين متأخر في السداد؟" — "المنتجات اللي هتخلص؟"' />
+              placeholder='اكتب سؤالاً مثل: أكثر منتج مبيعاً؟ — من المتأخر في السداد؟ — ما توقعات الشهر القادم؟' />
             <button className="btn" onClick={ask}>اسأل</button>
           </div>
           {answer && <div style={{ marginTop: 10, background: 'var(--bg)', borderRadius: 8, padding: 12 }}>
@@ -163,7 +163,7 @@ export function BiPage() {
                 <b>{r.p.name}</b>
                 <span style={{ color: 'var(--soft)' }}>متاح: {r.p.stock} {r.p.unit}</span>
                 <Badge tone={r.cover < 1 ? 'red' : 'amber'}>
-                  {r.cover === Infinity ? 'نواقص دائماً' : `يكفي ~${r.cover.toFixed(1)} شهر`}
+                  {r.cover === Infinity ? 'لا مبيعات مسجلة' : `يكفي ~${r.cover.toFixed(1)} شهر`}
                 </Badge>
                 <span style={{ color: 'var(--soft)' }}>مبيعات: {r.monthlySold.toFixed(1)}/شهر</span>
               </div>
@@ -180,7 +180,7 @@ export function BiPage() {
                 <span>{num(r.amount)} جنيه</span>
                 <Badge tone={r.oldest > 30 ? 'red' : r.oldest > 14 ? 'amber' : 'gray'}>{r.oldest} يوم ({r.count} فاتورة)</Badge>
               </div>
-            )) : <span style={{ color: 'var(--soft)' }}>مفيش متأخرات ✓</span>}
+            )) : <span style={{ color: 'var(--soft)' }}>لا توجد متأخرات ✓</span>}
             {marginDrops.length > 0 && (
               <div style={{ marginTop: 8, borderTop: '1px solid var(--border)', paddingTop: 8 }}>
                 <b style={{ color: 'var(--red)' }}>هبوط هامش ربح:</b>

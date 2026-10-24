@@ -62,7 +62,7 @@ export function TeamPage() {
       <div className="card"><div className="card-body">
         <h3>الشركة والفريق</h3>
         <p style={{ color: 'var(--soft)', fontSize: 13.5 }}>
-          مساحة العمل والفريق والأدوار متاحة في الحساب السحابي (دخول/حساب جديد) — بياناتك المحلية الحالية بتترفع تلقائياً عند أول دخول.
+          تتوفر مساحة العمل والفريق والأدوار في الحساب السحابي (دخول / حساب جديد) — وستُرفع بياناتك المحلية تلقائياً عند أول تسجيل دخول.
         </p>
         {data.settings?.companyName && (
           <p style={{ marginTop: 10 }}>
@@ -155,7 +155,7 @@ export function TeamPage() {
                 <span key="e" className="mono" style={{ fontSize: 12 }}>{fmtDate(String(i.expires_at).slice(0, 10))}</span>,
                 !i.used && isManagerUp ? <Button key="x" size="sm" variant="danger" onClick={async () => { await backend.deleteInvite(i.id); setInvites(await backend.listInvites()); }}>حذف</Button> : <span key="x" />,
               ]}
-              empty="لا دعوات — أنشئ كود دعوة وابعتوه للموظف" />
+              empty="لا توجد دعوات — أنشئ كود دعوة وأرسله إلى الموظف" />
           </div>
         </div>
       )}
