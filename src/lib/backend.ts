@@ -14,8 +14,8 @@ let mode: Mode = 'local';
 export const getMode = () => mode;
 export const setMode = (m: Mode) => { mode = m; };
 
-export type Coll = 'products' | 'partners' | 'invoices' | 'leads' | 'employees' | 'attendance' | 'tasks' | 'ledger' | 'purchaseOrders' | 'notifications' | 'stockMoves' | 'shifts';
-const COLLS: Coll[] = ['products', 'partners', 'invoices', 'leads', 'employees', 'attendance', 'tasks', 'ledger', 'purchaseOrders', 'notifications', 'stockMoves', 'shifts'];
+export type Coll = 'products' | 'partners' | 'invoices' | 'leads' | 'employees' | 'attendance' | 'tasks' | 'ledger' | 'purchaseOrders' | 'notifications' | 'stockMoves' | 'shifts' | 'accounts' | 'journals';
+const COLLS: Coll[] = ['products', 'partners', 'invoices', 'leads', 'employees', 'attendance', 'tasks', 'ledger', 'purchaseOrders', 'notifications', 'stockMoves', 'shifts', 'accounts', 'journals'];
 
 export async function getSession() { return sb.auth.getSession(); }
 export async function getUser() { const { data } = await sb.auth.getUser(); return data.user; }
@@ -26,7 +26,7 @@ export async function signOut() { return sb.auth.signOut(); }
 export async function loadAll(): Promise<DBData | null> {
   const user = await getUser();
   if (!user) return null;
-  const out: any = { products: [], partners: [], invoices: [], leads: [], employees: [], attendance: [], tasks: [], ledger: [], purchaseOrders: [], notifications: [], stockMoves: [], shifts: [], settings: null, meta: { version: 1 } };
+  const out: any = { products: [], partners: [], invoices: [], leads: [], employees: [], attendance: [], tasks: [], ledger: [], purchaseOrders: [], notifications: [], stockMoves: [], shifts: [], accounts: [], journals: [], settings: null, meta: { version: 2 } };
   for (const c of COLLS) {
     const { data, error } = await sb.from(`ns_${c}`).select('id, data');
     if (error) throw new Error(error.message);

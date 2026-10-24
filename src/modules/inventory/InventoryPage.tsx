@@ -50,7 +50,7 @@ export function InventoryPage() {
       </div>
 
       <div className="card">
-        <Table cols={['المنتج', 'الكود', 'التصنيف', 'السعر', 'التكلفة', 'المخزون', 'حد الطلب', '']} rows={rows}
+        <Table widths={['', '110px', '120px', '100px', '100px', '110px', '90px', '180px']} cols={['المنتج', 'الكود', 'التصنيف', 'السعر', 'التكلفة', 'المخزون', 'حد الطلب', '']} rows={rows}
           render={p => [
             <b key="n">{p.name}</b>,
             <span key="s" className="mono">{p.sku}</span>,

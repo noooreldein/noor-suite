@@ -4,6 +4,7 @@
  * every entity is a "collection" with CRUD + query helpers.
  */
 import { Collection } from '../types/core';
+import { DEFAULT_COA, migrateLegacyLedger } from './accounting';
 
 export interface DBData {
   products: any[];
@@ -18,8 +19,10 @@ export interface DBData {
   notifications: any[];
   stockMoves: any[];
   shifts: any[];
+  accounts: any[];
+  journals: any[];
   settings: any;
-  meta: { version: number; seededAt?: string };
+  meta: { version: number; seededAt?: string; legacyMigrated?: boolean };
 }
 
 const KEY = 'noor-suite-db-v1';
@@ -55,8 +58,10 @@ export function empty(): DBData {
   return {
     products: [], partners: [], invoices: [], leads: [], employees: [],
     attendance: [], tasks: [], ledger: [], purchaseOrders: [], notifications: [], stockMoves: [], shifts: [],
+    accounts: DEFAULT_COA.map(a => ({ ...a, createdAt: new Date().toISOString() })),
+    journals: [],
     settings: null,
-    meta: { version: 1 },
+    meta: { version: 2 },
   };
 }
 
@@ -67,5 +72,14 @@ export function normalize(data: any): DBData {
     if (!Array.isArray((out as any)[k])) (out as any)[k] = [];
   });
   if (typeof out.settings !== 'object' || out.settings === null) out.settings = null;
+  // ensure a chart of accounts always exists (structural data, not mock data)
+  if (!out.accounts.length) {
+    out.accounts = DEFAULT_COA.map(a => ({ ...a, id: a.id, createdAt: new Date().toISOString() }));
+  }
+  // one-time migration: legacy single-sided ledger -> balanced journal entries
+  if (out.ledger.length && !out.meta.legacyMigrated) {
+    out.journals = [...migrateLegacyLedger(out.ledger), ...out.journals];
+    out.meta.legacyMigrated = true;
+  }
   return out;
 }

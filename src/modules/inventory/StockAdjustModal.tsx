@@ -2,6 +2,8 @@ import { useState } from 'react';
 import { useStore } from '../../store/AppStore';
 import { Modal } from '../../components/ui/Modal';
 import { Button } from '../../components/ui/Button';
+import { adjustLines } from '../../lib/accounting';
+import { today } from '../../lib/dates';
 
 export function StockAdjustModal({ id, onClose }: { id: string; onClose: () => void }) {
   const { data, update, toast, add } = useStore();
@@ -11,6 +13,8 @@ export function StockAdjustModal({ id, onClose }: { id: string; onClose: () => v
   const apply = () => {
     update('products', id, { stock: p.stock + qty });
     add('stockMoves', { type: 'adjust', productId: id, name: p.name, delta: qty, ref: id });
+    const jl = adjustLines(qty * (p.cost ?? 0));
+    if (jl.length) add('journals', { date: today(), note: `تسوية مخزون — ${p.name}`, ref: id, source: 'adjust', lines: jl });
     if (p.stock + qty <= p.minStock) {
       add('notifications', { title: 'مخزون منخفض', body: `${p.name} وصل لحد إعادة الطلب`, read: false });
     }

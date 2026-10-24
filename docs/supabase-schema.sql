@@ -5,7 +5,7 @@
 DO $$
 DECLARE t text;
 BEGIN
-  FOREACH t IN ARRAY ARRAY['ns_products','ns_partners','ns_invoices','ns_leads','ns_employees','ns_attendance','ns_tasks','ns_ledger','ns_notifications','ns_stock_moves','ns_shifts','ns_settings']
+  FOREACH t IN ARRAY ARRAY['ns_products','ns_partners','ns_invoices','ns_leads','ns_employees','ns_attendance','ns_tasks','ns_ledger','ns_notifications','ns_stock_moves','ns_shifts','ns_accounts','ns_journals','ns_settings']
   LOOP
     EXECUTE format('CREATE TABLE IF NOT EXISTS %I (id text PRIMARY KEY, user_id uuid NOT NULL DEFAULT auth.uid(), data jsonb NOT NULL, created_at timestamptz DEFAULT now(), updated_at timestamptz DEFAULT now())', t);
     EXECUTE format('ALTER TABLE %I ENABLE ROW LEVEL SECURITY', t);

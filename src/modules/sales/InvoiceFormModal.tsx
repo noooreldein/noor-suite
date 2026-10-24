@@ -4,6 +4,7 @@ import { Modal } from '../../components/ui/Modal';
 import { Button } from '../../components/ui/Button';
 import { num } from '../../lib/format';
 import { today } from '../../lib/dates';
+import { saleLines, purchaseLines } from '../../lib/accounting';
 import { total as calcTotal } from '../../lib/money';
 
 /** Line-item invoice builder with live stock validation. */
@@ -48,12 +49,15 @@ export function InvoiceFormModal({ kind, onClose }: { kind: 'sale' | 'purchase';
         add('stockMoves', { type: 'purchase', productId: r.productId, name: r.name, delta: r.qty, ref: invId });
       });
     }
-    add('ledger', {
-      date, account: kind === 'sale' ? 'sales' : 'purchases',
-      debit: kind === 'purchase' ? total : 0,
-      credit: kind === 'sale' ? total : 0,
-      note: `${kind === 'sale' ? 'فاتورة مبيعات' : 'فاتورة مشتريات'} #${Date.now().toString(36).slice(-5)}`,
-    });
+    const cogs = kind === 'sale'
+      ? resolved.reduce((sum, r) => {
+          const prod = data.products.find((x: any) => x.id === r.productId);
+          return sum + r.qty * (prod?.cost ?? 0);
+        }, 0)
+      : 0;
+    add('journals', kind === 'sale'
+      ? { date, note: 'فاتورة مبيعات', ref: invId, source: 'sale', lines: saleLines(total, status === 'paid' ? total : 0, status === 'paid' ? 'cash' : 'credit', cogs) }
+      : { date, note: 'فاتورة مشتريات', ref: invId, source: 'purchase', lines: purchaseLines(total, status === 'paid' ? total : 0) });
     toast('تم إصدار الفاتورة ✓');
     onClose();
   };

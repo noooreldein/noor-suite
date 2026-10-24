@@ -5,6 +5,7 @@ import { Modal } from '../../components/ui/Modal';
 import { Button } from '../../components/ui/Button';
 import { num } from '../../lib/format';
 import { today } from '../../lib/dates';
+import { returnLines } from '../../lib/accounting';
 
 export function ReturnModal({ invoiceId, onClose }: { invoiceId: string; onClose: () => void }) {
   const { data, add, update, toast } = useStore();
@@ -36,7 +37,11 @@ export function ReturnModal({ invoiceId, onClose }: { invoiceId: string; onClose
       if (p) update('products', l.productId, { stock: p.stock + l.q });
       add('stockMoves', { type: 'return', productId: l.productId, name: l.name, delta: l.q, ref: retId });
     });
-    add('ledger', { date: today(), account: 'sales', debit: total, credit: 0, note: 'مرتجع مبيعات' });
+    const cogs = picked.reduce((sum: number, l: any) => {
+      const prod = data.products.find((x: any) => x.id === l.productId);
+      return sum + l.q * (prod?.cost ?? 0);
+    }, 0);
+    add('journals', { date: today(), note: 'مرتجع مبيعات', ref: retId, source: 'return', lines: returnLines(total, false, cogs) });
     toast(`تم تسجيل المرتجع (${num(total)} ج.م) والكميات رجعت للمخزون ✓`);
     onClose();
   };

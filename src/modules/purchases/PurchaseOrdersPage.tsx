@@ -11,6 +11,7 @@ import { num } from '../../lib/format';
 import { PurchaseOrder } from '../../types/entities';
 
 const today = () => new Date().toISOString().slice(0, 10);
+import { purchaseLines } from '../../lib/accounting';
 
 const STATUS: Record<string, { label: string; tone: 'gray' | 'blue' | 'green' | 'red' }> = {
   draft: { label: 'مسودة', tone: 'gray' },
@@ -30,20 +31,17 @@ export function PurchaseOrdersPage() {
   const orders = [...data.purchaseOrders].sort((a, b) => (a.date < b.date ? 1 : -1));
 
   const receive = (po: any) => {
-    po.items.forEach((it: any) => {
-      const prod = data.products.find(p => p.id === it.productId);
-      if (prod) update('products', it.productId, { stock: prod.stock + it.qty });
-      add('stockMoves', { type: 'purchase', productId: it.productId, name: it.name, delta: it.qty, ref: rcvId });
-    });
     const rcvId = add('invoices', {
       kind: 'purchase', partnerId: po.supplierId, date: today(),
       items: po.items.map((i: any) => ({ productId: i.productId, name: i.name, qty: i.qty, price: i.cost })),
       total: po.total, status: 'unpaid', note: `أمر شراء #${po.number}`,
     });
-    add('ledger', {
-      date: today(), account: 'purchases', debit: po.total, credit: 0,
-      note: `استلام أمر شراء #${po.number}`,
+    po.items.forEach((it: any) => {
+      const prod = data.products.find(p => p.id === it.productId);
+      if (prod) update('products', it.productId, { stock: prod.stock + it.qty });
+      add('stockMoves', { type: 'purchase', productId: it.productId, name: it.name, delta: it.qty, ref: rcvId });
     });
+    add('journals', { date: today(), note: `استلام أمر شراء #${po.number}`, ref: rcvId, source: 'purchase', lines: purchaseLines(po.total, 0) });
     update('purchaseOrders', po.id, { status: 'received' });
     toast(`تم استلام أمر الشراء #${po.number} — المخزون اتحدث ✓`);
   };

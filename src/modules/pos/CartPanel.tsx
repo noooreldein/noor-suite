@@ -6,6 +6,7 @@ import { Modal } from '../../components/ui/Modal';
 import { total as calcTotal } from '../../lib/money';
 import { num } from '../../lib/format';
 import { today } from '../../lib/dates';
+import { saleLines } from '../../lib/accounting';
 import { printHTML } from '../../lib/print';
 
 const METHODS = [
@@ -55,11 +56,16 @@ export function CartPanel({ cart, setQty, clear, shiftOpen, shiftId }: {
       collected: method === 'credit' ? paidNow : Math.min(paidNow, net),
       shiftId: shiftId,
     });
+    const cogs = lines.reduce((sum, l) => {
+      const p = data.products.find(x => x.id === l.pid);
+      return sum + l.qty * (p?.cost ?? 0);
+    }, 0);
     lines.forEach(l => {
       const p = data.products.find(x => x.id === l.pid)!;
       update('products', l.pid, { stock: Math.max(0, p.stock - l.qty) });
       add('stockMoves', { type: 'sale', productId: l.pid, name: l.name, delta: -l.qty, ref: invId });
     });
+    add('journals', { date: today(), note: `فاتورة نقطة بيع (${METHODS.find(m => m.key === method)?.label})`, ref: invId, source: 'pos', lines: saleLines(net, Math.min(paidNow, net), method, cogs) });
     setCheckout(false);
     clear();
     toast(status === 'paid' ? 'تم إتمام البيع ✓' : status === 'partial' ? 'تم البيع — دفعة جزئية مسجلة ✓' : 'تم البيع آجل — مسجل على العميل ✓');

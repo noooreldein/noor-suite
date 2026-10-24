@@ -20,7 +20,9 @@ export type Collection =
   | 'purchaseOrders'
   | 'notifications'
   | 'stockMoves'
-  | 'shifts';
+  | 'shifts'
+  | 'accounts'
+  | 'journals';
 
 export interface Settings {
   companyName: string;
@@ -38,3 +40,22 @@ export interface Notification extends BaseEntity {
 }
 
 export type Direction = 'rtl' | 'ltr';
+
+export interface Account {
+  code: string;
+  name: string;
+  type: 'asset' | 'liability' | 'equity' | 'revenue' | 'expense';
+  parent?: string;
+  isGroup?: boolean;
+  opening?: number;
+}
+
+export interface JournalLine { code: string; debit: number; credit: number; }
+
+export interface JournalEntry {
+  date: string;
+  note: string;
+  ref?: string;
+  source: 'sale' | 'purchase' | 'return' | 'pos' | 'adjust' | 'expense' | 'manual' | 'closing' | 'opening' | 'legacy';
+  lines: JournalLine[];
+}
