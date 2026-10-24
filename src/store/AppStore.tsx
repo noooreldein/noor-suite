@@ -75,25 +75,21 @@ export function AppStoreProvider({ children, seedFn }: { children: React.ReactNo
   }, [commit]);
 
   const update = useCallback((col: Collection, id: string, patch: any) => {
-    let merged: any;
-    commit(d => {
-      const next = (d as any)[col].map((r: any) => {
-        if (r.id !== id) return r;
-        merged = { ...r, ...patch, updatedAt: new Date().toISOString() };
-        return merged;
-      });
-      return { ...d, [col]: next };
-    });
+    // Compute prev/merged SYNCHRONOUSLY from the current snapshot: React defers
+    // the setData updater inside a batch, so reading `merged` after commit()
+    // used to race (undefined) — this also silently skipped cloud sync before.
+    const prev = (data as any)[col]?.find((r: any) => r.id === id);
+    const merged = prev ? { ...prev, ...patch, updatedAt: new Date().toISOString() } : undefined;
+    if (merged) commit(d => ({ ...d, [col]: (d as any)[col].map((r: any) => r.id === id ? merged : r) }));
     if (opBatch.current) {
-      const prev = (data as any)[col]?.find((r: any) => r.id === id);
       // product stock changes ride the atomic op as per-branch deltas, never as blind upserts
-      if (col === 'products' && prev) opBatch.current.deltas.push(...branchDeltas(prev, merged));
-      else opBatch.current.upserts.push({ c: col as any, e: merged });
+      if (col === 'products' && prev && merged) opBatch.current.deltas.push(...branchDeltas(prev, merged));
+      else if (merged) opBatch.current.upserts.push({ c: col as any, e: merged });
       return;
     }
     if (backend.getMode() === 'cloud' && merged)
       backend.upsert(col as any, merged).then(ok => { if (!ok) toast('تعذر الحفظ السحابي — سيُعاد تلقائيًا عند الاتصال', 'err'); });
-  }, [commit]);
+  }, [commit, data]);
 
   const remove = useCallback((col: Collection, id: string) => {
     commit(d => ({ ...d, [col]: (d as any)[col].filter((r: any) => r.id !== id) }));
@@ -113,11 +109,11 @@ export function AppStoreProvider({ children, seedFn }: { children: React.ReactNo
   }, []);
 
   const setSettings = useCallback((patch: Partial<Settings>) => {
-    let merged: any;
-    commit(d => { merged = { ...d.settings, ...patch }; return { ...d, settings: merged }; });
-    if (backend.getMode() === 'cloud' && merged)
+    const merged: any = { ...data.settings, ...patch };
+    commit(d => ({ ...d, settings: merged }));
+    if (backend.getMode() === 'cloud')
       backend.saveSettings(merged).then(ok => { if (!ok) toast('تعذر حفظ الإعدادات سحابيًا — سيُعاد تلقائيًا', 'err'); });
-  }, [commit]);
+  }, [commit, data]);
 
   const ingest = useCallback((remote: db.DBData) => { setData(remote); }, []);
 
