@@ -101,7 +101,7 @@ export function AppStoreProvider({ children, seedFn }: { children: React.ReactNo
     setTimeout(() => setToasts(t => t.filter(x => x.id !== id)), 2800);
   }, []);
 
-  const reseed = useCallback(() => { setData(db.reset()); const fresh = seedFn(); setData(db.normalize(fresh)); // normalize: ensure CoA + migrate demo ledger into journals }, [seedFn]);
+  const reseed = useCallback(() => { setData(db.reset()); const fresh = seedFn(); setData(db.normalize(fresh)); }, [seedFn]);
 
   const exportAll = useCallback(() => JSON.stringify(data, null, 2), [data]);
 
