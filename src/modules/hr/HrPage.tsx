@@ -40,7 +40,7 @@ export function HrPage() {
 
       <div className="toolbar">
         <Tabs active={tab} onChange={setTab} tabs={[
-          { key: 'roster', label: 'العمالة' },
+          { key: 'roster', label: 'الموظفون' },
           { key: 'attendance', label: `الحضور (${attToday.length})` },
         ]} />
         <div className="grow" />

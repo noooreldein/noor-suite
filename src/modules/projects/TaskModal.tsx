@@ -35,7 +35,7 @@ export function TaskModal({ id, onClose }: { id: string | null; onClose: () => v
         <div>
           <label className="field">المرحلة</label>
           <select value={form.stage} onChange={e => set('stage', e.target.value)}>
-            <option value="todo">انتظار</option><option value="doing">تنفيذ</option>
+            <option value="todo">قائمة الانتظار</option><option value="doing">جاري التنفيذ</option>
             <option value="review">مراجعة</option><option value="done">منجز</option>
           </select>
         </div>

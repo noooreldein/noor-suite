@@ -133,7 +133,7 @@ export function PurchaseOrdersPage() {
                     <span key="a">{num(r.avg)}</span>,
                     <span key="t">{r.times}</span>,
                     <span key="d" className="mono">{r.lastDate}</span>,
-                    i === 0 ? <Badge key="b" tone="green">الأوفر ✓</Badge> : <span key="b" />,
+                    i === 0 ? <Badge key="b" tone="green">الأقل سعراً ✓</Badge> : <span key="b" />,
                   ]} />
               ) : <p style={{ color: 'var(--soft)' }}>لا مشتريات سابقة لهذا المنتج بعد.</p>
             )}

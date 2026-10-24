@@ -53,7 +53,7 @@ export function InventoryPage() {
 
       <div className="toolbar">
         <SearchBox value={q} onChange={setQ} placeholder="بحث بالاسم / الكود / التصنيف..." />
-        <button className={`chip ${lowOnly ? 'on' : ''}`} onClick={() => setLowOnly(v => !v)}>⚠ يحتاج تعويض</button>
+        <button className={`chip ${lowOnly ? 'on' : ''}`} onClick={() => setLowOnly(v => !v)}>⚠ تحت حد الطلب</button>
         <Button variant="outline" onClick={() => download(`inventory-${today()}.csv`, toCSV(data.products))}>تصدير CSV</Button>
         <Button variant="outline" onClick={() => setShowMoves(true)}>سجل حركة المخزون</Button>
         <Button variant="outline" onClick={() => setShowBranches(true)}>🏪 الفروع</Button>
@@ -76,7 +76,7 @@ export function InventoryPage() {
               </span>); })(),
             <span key="m">{p.minStock}</span>,
             <div key="a" className="row">
-              <Button size="sm" variant="outline" onClick={() => setAdjusting(p.id)}>مخزون +</Button>
+              <Button size="sm" variant="outline" onClick={() => setAdjusting(p.id)}>إضافة مخزون</Button>
               <Button size="sm" variant="outline" onClick={() => setEditing(p.id)}>تعديل</Button>
               {canDelete && <Button size="sm" variant="danger" onClick={() => setConfirmId(p.id)}>حذف</Button>}
             </div>,

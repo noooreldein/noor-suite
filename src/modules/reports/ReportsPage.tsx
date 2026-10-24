@@ -51,7 +51,7 @@ export function ReportsPage() {
         <Tabs active={tab} onChange={setTab} tabs={[
           { key: 'sales', label: 'المبيعات والأرباح' },
           { key: 'inventory', label: 'المخزون' },
-          { key: 'hr', label: 'العمالة' },
+          { key: 'hr', label: 'الموظفون' },
         ]} />
         <div className="grow" />
         <Button variant="outline" onClick={printSales}>🖨 طباعة التقرير</Button>
@@ -75,7 +75,7 @@ export function ReportsPage() {
         <>
           <div className="card"><div className="card-head"><h3>المنتجات الأكثر مبيعاً</h3></div><div className="card-body"><BarChart data={topProducts} /></div></div>
           <div className="grid-2 mt">
-            <div className="card"><div className="card-head"><h3>قيمة المخزون بالتصنيف</h3></div><div className="card-body">
+            <div className="card"><div className="card-head"><h3>قيمة المخزون حسب التصنيف</h3></div><div className="card-body">
               <DonutChart data={(() => {
                 const m = new Map<string, number>();
                 data.products.forEach(p => m.set(p.category, (m.get(p.category) ?? 0) + p.stock * p.cost));
@@ -92,7 +92,7 @@ export function ReportsPage() {
       )}
 
       {tab === 'hr' && (
-        <div className="card"><div className="card-head"><h3>الرواتب بالموظف</h3></div><div className="card-body">
+        <div className="card"><div className="card-head"><h3>الرواتب حسب الموظف</h3></div><div className="card-body">
           <BarChart data={data.employees.map(e => ({ label: e.name.split(' ')[0], value: e.salary }))} color="var(--amber)" />
           <div style={{ marginTop: 12 }}>
             {data.employees.map(e => (

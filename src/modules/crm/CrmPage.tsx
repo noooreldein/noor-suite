@@ -17,7 +17,7 @@ const STAGES: { key: Lead['stage']; label: string; tone: 'gray' | 'blue' | 'ambe
   { key: 'new', label: 'جديد', tone: 'gray' },
   { key: 'contacted', label: 'تم التواصل', tone: 'blue' },
   { key: 'proposal', label: 'عرض سعر', tone: 'amber' },
-  { key: 'won', label: 'مغلومة ✓', tone: 'green' },
+  { key: 'won', label: 'مغلقة ✓', tone: 'green' },
   { key: 'lost', label: 'خسارة', tone: 'red' },
 ];
 
@@ -46,7 +46,7 @@ export function CrmPage() {
     <>
       <div className="kpis">
         <StatCard label="قيمة الفرص المفتوحة" value={num(pipelineValue)} tone="primary" />
-        <StatCard label="فرص مغلومة" value={won.length} tone="green" />
+        <StatCard label="فرص مغلقة" value={won.length} tone="green" />
         <StatCard label="نسبة الإغلاق" value={`${data.leads.length ? Math.round(won.length / data.leads.length * 100) : 0}%`} />
       </div>
 
@@ -62,7 +62,7 @@ export function CrmPage() {
                 <span style={{ color: 'var(--soft)', fontSize: 12 }}>{l.company}</span>
                 <div className="grow" />
                 <a className="btn btn-sm" target="_blank" rel="noreferrer"
-                  href={waLink(l.phone, `مرحباً ${l.name}، معاك ${data.settings?.companyName ?? ''} — متابعة لفرصة التعاون الخاصة بيك 🙌`)}>
+                  href={waLink(l.phone, `مرحباً ${l.name}، معكم ${data.settings?.companyName ?? ''} — نتابع معكم فرصة التعاون، هل من مستجدات؟`)}>
                   واتساب
                 </a>
                 <Button size="sm" onClick={() => { update('leads', l.id, { lastContact: today(), nextFollowUp: undefined }); toast('تم تسجيل المتابعة ✓'); }}>تمت المتابعة</Button>
@@ -73,7 +73,7 @@ export function CrmPage() {
       )}
 
       <div className="toolbar">
-        <span className="badge b-gray">اسحب الفرصة بمراحل الخط من الأزرار</span>
+        <span className="badge b-gray">انقل الفرصة بين المراحل بالسهمين ‹ ›</span>
         <div className="grow" />
         <Button onClick={() => setEditing('new')}>+ فرصة جديدة</Button>
       </div>

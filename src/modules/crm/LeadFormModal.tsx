@@ -23,7 +23,7 @@ export function LeadFormModal({ id, onClose }: { id: string | null; onClose: () 
           <label className="field">المرحلة</label>
           <select value={form.stage} onChange={e => set('stage', e.target.value)}>
             <option value="new">جديد</option><option value="contacted">تم التواصل</option>
-            <option value="proposal">عرض سعر</option><option value="won">مغلومة</option><option value="lost">خسارة</option>
+            <option value="proposal">عرض سعر</option><option value="won">مغلقة</option><option value="lost">خسارة</option>
           </select>
         </div>
         <div><label className="field">ملاحظات</label><input value={form.notes} onChange={e => set('notes', e.target.value)} /></div>
