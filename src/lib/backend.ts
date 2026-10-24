@@ -44,6 +44,7 @@ export async function loadAll(): Promise<DBData | null> {
     const { data, error } = await sb.from(tbl(c)).select('id, data, org_id, updated_at');
     if (error) throw new Error(error.message);
     out[c] = (data ?? []).map((r: any) => ({ ...r.data, id: r.id, orgId: r.org_id ?? null }));
+      lastMeta[c] = Object.fromEntries((data ?? []).map((r: any) => [r.id, r.updated_at]));
   }
   const { data: st } = await sb.from('ns_settings').select('data').eq('id', `settings_${user.id}`).maybeSingle();
   if (!st?.data) {
