@@ -24,8 +24,11 @@ let activeOrg: string | null = null;
 export const setActiveOrg = (id: string | null) => { activeOrg = id; };
 export const getActiveOrg = () => activeOrg;
 
-/** Physical table name for a collection (ns_purchaseOrders -> ns_purchase_orders). */
-const tbl = (c: Coll) => 'ns_' + (c === 'purchaseOrders' ? 'purchase_orders' : c);
+/** Physical table name for a collection — camelCase collections map to
+ * snake_case tables (purchaseOrders -> ns_purchase_orders, stockMoves ->
+ * ns_stock_moves). The previous 1:1 join 404'd for both collections,
+ * silently breaking every cloud load. */
+const tbl = (c: Coll) => 'ns_' + c.replace(/([A-Z])/g, '_$1').toLowerCase();
 
 export async function getSession() { return sb.auth.getSession(); }
 export async function getUser() { const { data } = await sb.auth.getUser(); return data.user; }
