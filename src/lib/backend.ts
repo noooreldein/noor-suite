@@ -4,8 +4,10 @@ import { createClient } from '@supabase/supabase-js';
 import type { Settings } from '../types/core';
 import type { DBData } from './db';
 
-const URL = 'https://zcsowvdfdteuiyaybnqm.supabase.co';
-const ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inpjc293dmRmZHRldWl5YXlibnFtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTE0NzQxNTQsImV4cCI6MjEwNzA1MDE1NH0.2E63rAkbY8zs8kf_5uSftUGhFzDUnlAFBwMWbnDW13Q';
+// Self-hosting: set VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY (see README);
+// the defaults below keep the hosted deployment working.
+const URL: string = (import.meta as any).env?.VITE_SUPABASE_URL || 'https://zcsowvdfdteuiyaybnqm.supabase.co';
+const ANON: string = (import.meta as any).env?.VITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inpjc293dmRmZHRldWl5YXlibnFtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTE0NzQxNTQsImV4cCI6MjEwNzA1MDE1NH0.2E63rAkbY8zs8kf_5uSftUGhFzDUnlAFBwMWbnDW13Q';
 
 export const sb = createClient(URL, ANON);
 
@@ -62,6 +64,7 @@ export async function loadAll(): Promise<DBData | null> {
 type Op = { coll: Coll; kind: 'upsert' | 'delete' | 'op'; entity?: any; id?: string };
 
 export interface Operation {
+  opId?: string;
   orgId: string | null;
   upserts: { c: Coll; e: any }[];
   deltas: { p: string; b: string; d: number }[];
@@ -76,21 +79,40 @@ export function pendingCount() { return queue.length; }
 /** Atomic composite operation — applies stock deltas with row locks and row
  * upserts/deletes in ONE database transaction (no lost updates, no partial
  * sales). Falls back to the retry queue like any other write. */
-export async function rawApplyOp(op: Operation): Promise<boolean> {
-  const user = await getUser(); if (!user) return false;
-  const { error } = await sb.rpc('ns_apply_op', { p_op: {
+export type ApplyOutcome =
+  | { status: 'applied' }
+  | { status: 'rejected'; msg: string }
+  | { status: 'unreachable' };
+
+async function rawApplyOp(op: Operation): Promise<ApplyOutcome> {
+  const user = await getUser(); if (!user) return { status: 'unreachable' };
+  // Idempotency key: a repeated request after a lost response is a no-op
+  // server-side (ns_apply_op records the id in the same transaction).
+  const p_op = {
+    opId: op.opId ?? crypto.randomUUID(),
     orgId: op.orgId ?? activeOrg,
     upserts: op.upserts.map(u => ({ t: tbl(u.c), e: u.e })),
     deltas: op.deltas,
     deletes: op.deletes.map(d => ({ t: tbl(d.c), id: d.id })),
-  } });
-  return !error;
+  };
+  op.opId = p_op.opId;
+  let data: any = null, error: any = null;
+  try { ({ data, error } = await sb.rpc('ns_apply_op', { p_op })); } catch { return { status: 'unreachable' }; }
+  if (error) return { status: 'unreachable' }; // transport/server down -> safe to retry (idempotent)
+  if (data && data.ok === false) return { status: 'rejected', msg: data.msg ?? 'تم رفض العملية' };
+  return { status: 'applied' };
 }
 
-export async function applyOperation(op: Operation): Promise<boolean> {
-  const ok = await rawApplyOp(op);
-  if (!ok) { queue.push({ coll: 'invoices', kind: 'op', entity: op }); persistQueue(); }
-  return ok;
+/** Apply a composite operation atomically.
+ * - rejected: business rule (stock, permissions) -> NEVER retried; caller
+ *   reconciles local state with the server.
+ * - unreachable: transient (offline) -> queued, and safe to retry because of
+ *   the idempotency key. */
+export async function applyOperation(op: Operation): Promise<ApplyOutcome> {
+  const outcome = await rawApplyOp(op);
+  if (outcome.status === 'unreachable')
+    { queue.push({ coll: 'invoices', kind: 'op', entity: op }); persistQueue(); }
+  return outcome;
 }
 
 async function rawUpsert(c: Coll, e: any): Promise<boolean> {
@@ -177,10 +199,15 @@ export const getLoadMeta = () => lastMeta;
 export async function flushQueue(): Promise<number> {
   const still: Op[] = [];
   for (const op of queue) {
-    const ok = op.kind === 'upsert' ? await rawUpsert(op.coll, op.entity)
-      : op.kind === 'op' ? await rawApplyOp(op.entity as Operation)
-      : await rawDelete(op.coll, op.id!);
-    if (!ok) still.push(op);
+    if (op.kind === 'op') {
+      const r = await rawApplyOp(op.entity as Operation);
+      // business rejections never succeed later — drop them; local state was
+      // already reconciled with the server when the op first failed
+      if (r.status === 'unreachable') still.push(op);
+    } else {
+      const ok = op.kind === 'upsert' ? await rawUpsert(op.coll, op.entity) : await rawDelete(op.coll, op.id!);
+      if (!ok) still.push(op);
+    }
   }
   queue = still;
   persistQueue();

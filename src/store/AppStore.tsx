@@ -105,7 +105,17 @@ export function AppStoreProvider({ children, seedFn }: { children: React.ReactNo
     opBatch.current = batch;
     try { fn(); } finally { opBatch.current = null; }
     if (backend.getMode() === 'cloud')
-      backend.applyOperation(batch).then(ok => { if (!ok) toast('تعذر تنفيذ العملية سحابيًا — سيُعاد تلقائيًا عند الاتصال', 'err'); });
+      backend.applyOperation(batch).then(async r => {
+        if (r.status === 'rejected') {
+          // business rejection (stock/permission): undo the optimistic local
+          // changes by re-adopting the server state
+          toast(r.msg, 'err');
+          const remote = await backend.loadAll();
+          if (remote) ingest(remote);
+        } else if (r.status === 'unreachable') {
+          toast('تعذر تنفيذ العملية سحابيًا — سيُعاد تلقائيًا عند الاتصال', 'err');
+        }
+      });
   }, []);
 
   const setSettings = useCallback((patch: Partial<Settings>) => {
