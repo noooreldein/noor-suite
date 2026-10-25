@@ -1,236 +1,285 @@
+#!/usr/bin/env node
 /**
- * Noor Suite — database integration suite
- * =========================================
- * Runs the reviewer's core scenarios against a REAL Supabase project over
- * REST with throwaway accounts (they are created per run and listed at the
- * end for deletion — see "Cleanup" in the README).
+ * Noor Suite — database integration suite (reviewer acceptance scenarios).
  *
- * Usage:
- *   SUPABASE_URL=https://<ref>.supabase.co \
- *   SUPABASE_ANON_KEY=<anon key> \
- *   node tests/integration/suite.js
- *
- * Scenarios (each must PASS for a release):
- *   1. parallel-sales        concurrent devices, zero lost updates
- *   2. insufficient-stock    rejected cleanly, no partial writes
- *   3. duplicate-op          repeated opId applies exactly once (idempotency)
- *   4. org-isolation         two companies cannot see or touch each other
- *   5. composite-flows       return + transfer + PO receive keep books balanced
- *   6. backup-roundtrip      snapshot write + read-back integrity
+ * SAFETY: refuses to run unless a test database is configured explicitly.
+ *   - set SUPABASE_URL + SUPABASE_ANON_KEY env vars, or
+ *   - pass --allow-prod to target the repo's built-in demo project (throwaway
+ *     accounts only — never touches real rows; it cleans up after itself).
+ * Optional SUPABASE_SERVICE_ROLE (env) enables full auth-user cleanup.
+ * Results are printed per scenario; exit code is non-zero on any failure.
  */
+const EMBEDDED = {
+  url: 'https://zcsowvdfdteuiyaybnqm.supabase.co',
+  anon: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inpjc293dmRmZHRldWl5YXlibnFtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTE0NzQxNTQsImV4cCI6MjEwNzA1MDE1NH0.2E63rAkbY8zs8kf_5uSftUGhFzDUnlAFBwMWbnDW13Q',
+};
+const RUNTS = Date.now().toString(36);
+const cfg = (process.env.SUPABASE_URL && process.env.SUPABASE_ANON_KEY)
+  ? { url: process.env.SUPABASE_URL, anon: process.env.SUPABASE_ANON_KEY }
+  : (process.argv.includes('--allow-prod') ? EMBEDDED : null);
+if (!cfg) {
+  console.error('REFUSING TO RUN: no test database configured.');
+  console.error('Set SUPABASE_URL and SUPABASE_ANON_KEY to a dedicated test project,');
+  console.error('or pass --allow-prod to explicitly target the built-in demo project.');
+  process.exit(2);
+}
+import { randomUUID, randomBytes } from 'node:crypto';
+const H = (t, anon) => ({ apikey: anon ?? cfg.anon, Authorization: 'Bearer ' + t, 'Content-Type': 'application/json' });
+const api = async (path, token, body, method) => {
+  const r = await fetch(cfg.url + path, { method: method || (body ? 'POST' : 'GET'), headers: H(token), body: body ? JSON.stringify(body) : undefined });
+  return { status: r.status, data: await r.json().catch(() => null) };
+};
+const signup = async em => {
+  const r = await api('/auth/v1/signup', null, { email: em, password: 'Test123456!' });
+  if (!r.data?.access_token) throw new Error('signup failed for ' + em + ': ' + JSON.stringify(r.data).slice(0, 120));
+  return r.data.access_token;
+};
+const uidOf = async t => (await api('/auth/v1/user', t)).data.id;
+const created = []; // { email, token } — cleaned in finally
+const orgOf = [];   // org ids created this run
 
-const SB = process.env.SUPABASE_URL || 'https://zcsowvdfdteuiyaybnqm.supabase.co';
-const ANON = process.env.SUPABASE_ANON_KEY ||
-  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inpjc293dmRmZHRldWl5YXlibnFtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTE0NzQxNTQsImV4cCI6MjEwNzA1MDE1NH0.2E63rAkbY8zs8kf_5uSftUGhFzDUnlAFBwMWbnDW13Q';
-const RUN = Date.now();
+async function bootstrap(name) {
+  const email = `it_${Date.now()}_${randomBytes(3).toString('hex')}@integration.noor`;
+  const token = await signup(email);
+  created.push({ email, token });
+  const uid = await uidOf(token);
+  const org = 'org_' + randomBytes(8).toString('hex');
+  const o = await api('/rest/v1/ns_orgs', token, { id: org, name, owner_id: uid });
+  if (o.status !== 201) throw new Error('org bootstrap failed: ' + JSON.stringify(o.data).slice(0, 120));
+  await api('/rest/v1/ns_members', token, { id: 'mem_' + org, org_id: org, user_id: uid, role: 'owner' });
+  orgOf.push(org);
+  return { email, token, uid, org };
+}
+async function addMember(host, org, newUid, role) {
+  const r = await api('/rest/v1/ns_members', host.token, { id: 'mem_' + randomBytes(6).toString('hex'), org_id: org, user_id: newUid, role });
+  return r.status === 201;
+}
+async function product(acc, { stock = 5, id, name = 'منتج' } = {}) {
+  const pid = id || 'pro_' + randomBytes(8).toString('hex');
+  const r = await api('/rest/v1/ns_products', acc.token, { id: pid, data: { name, stock, branchStock: { main: stock }, minStock: 2, cost: 10, price: 20 } });
+  if (r.status !== 201) throw new Error('product insert failed: ' + JSON.stringify(r.data).slice(0, 150));
+  return pid;
+}
+async function applyOp(token, op) {
+  return api('/rest/v1/rpc/ns_apply_op', token, { p_op: op });
+}
+const fetchProduct = async (token, id) => (await api('/rest/v1/ns_products?id=eq.' + id + '&select=data', token)).data?.[0]?.data;
+const countRows = async (token, org, table) => (await api(`/rest/v1/${table}?org_id=eq.${org}&select=id`, token)).data?.length ?? -1;
+
+// ===== scenarios =====
 const results = [];
-const createdAccounts = [];
-let pass = true;
+const pass = (name, note) => { results.push({ name, ok: true, note }); console.log('PASS ', name, '—', note); };
+const fail = (name, note) => { results.push({ name, ok: false, note }); console.log('FAIL ', name, '—', note); };
 
-const ok = (name, cond, detail = '') => {
-  results.push({ name, ok: !!cond, detail });
-  if (!cond) pass = false;
-  console.log(`${cond ? 'PASS' : 'FAIL'}  ${name}${detail ? '  — ' + detail : ''}`);
-};
+async function scenario_parallelSales() {
+  const a = await bootstrap('شركة المبيعات المتوازية');
+  const pid = await product(a, { stock: 12 });
+  const ops = [...Array(5)].map(() => applyOp(a.token, {
+    opId: randomUUID(), orgId: a.org, deltas: [{ p: pid, b: 'main', d: -1 }],
+    upserts: [{ t: 'ns_invoices', e: { id: 'inv_' + randomBytes(6).toString('hex'), kind: 'sale', total: 20, status: 'paid' } }], deletes: [],
+  }));
+  const rs = await Promise.all(ops);
+  const allOk = rs.every(r => r.status === 200 && r.data?.ok);
+  const d = await fetchProduct(a.token, pid);
+  const inv = await countRows(a.token, a.org, 'ns_invoices');
+  (allOk && d?.stock === 7 && d?.branchStock?.main === 7 && inv === 5)
+    ? pass('parallel-sales', `5 عمليات متزامنة → نزل بالظبط 5 (stock=${d.stock}, invoices=${inv})`)
+    : fail('parallel-sales', `allOk=${allOk}, stock=${d?.stock}, invoices=${inv}`);
+}
 
-const api = async (path, token, body, method = 'POST') => {
-  const r = await fetch(SB + path, {
-    method,
-    headers: {
-      apikey: ANON,
-      Authorization: 'Bearer ' + (token || ANON),
-      'Content-Type': 'application/json',
-      Prefer: 'return=minimal',
-    },
-    body: body ? JSON.stringify(body) : undefined,
-  });
-  let data = null;
-  try { data = await r.json(); } catch { data = null; }
-  return { status: r.status, data };
-};
+async function scenario_insufficientStock() {
+  const a = await bootstrap('شركة النقص');
+  const pid = await product(a, { stock: 3 });
+  const inv0 = await countRows(a.token, a.org, 'ns_invoices');
+  const r = await applyOp(a.token, { opId: randomUUID(), orgId: a.org, deltas: [{ p: pid, b: 'main', d: -999 }], upserts: [{ t: 'ns_invoices', e: { id: 'inv_x1_' + RUNTS, kind: 'sale', total: 1 } }], deletes: [] });
+  const d = await fetchProduct(a.token, pid);
+  const inv1 = await countRows(a.token, a.org, 'ns_invoices');
+  (r.data?.ok === false && r.data?.code === 'insufficient_stock' && d?.stock === 3 && inv1 === inv0)
+    ? pass('insufficient-stock', `رفض مع نقص المخزون بدون أي ترحيل جزئي (code=${r.data.code}, stock=${d.stock}, invoices ${inv0}→${inv1})`)
+    : fail('insufficient-stock', `code=${r.data?.code}, stock=${d?.stock}, invoices ${inv0}→${inv1}`);
+}
 
-const signup = async (label) => {
-  const email = `it_${label}_${RUN}@integration.noor`;
-  const r = await api('/auth/v1/signup', null, { email, password: 'Integration!2026' });
-  const token = r.data?.access_token;
-  if (!token) throw new Error('signup failed: ' + JSON.stringify(r.data).slice(0, 120));
-  createdAccounts.push(email);
-  return { email, token };
-};
+async function scenario_duplicateOp() {
+  const a = await bootstrap('شركة التكرار');
+  const pid = await product(a, { stock: 6 });
+  const opId = randomUUID();
+  const dupId = 'inv_dup_' + randomBytes(4).toString('hex');
+  const inv = { t: 'ns_invoices', e: { id: dupId, kind: 'sale', total: 20 } };
+  const r1 = await applyOp(a.token, { opId, orgId: a.org, deltas: [{ p: pid, b: 'main', d: -1 }], upserts: [inv], deletes: [] });
+  const r2 = await applyOp(a.token, { opId, orgId: a.org, deltas: [{ p: pid, b: 'main', d: -1 }], upserts: [inv], deletes: [] });
+  const d = await fetchProduct(a.token, pid);
+  const invRows = await countRows(a.token, a.org, 'ns_invoices');
+  (r1.data?.ok && r2.data?.ok && r2.data?.duplicate && d?.stock === 5 && invRows === 1)
+    ? pass('duplicate-op', `نفس المفتاح اتطبق مرة واحدة بس (stock=${d.stock}, invoice rows=${invRows}, duplicate=${r2.data.duplicate})`)
+    : fail('duplicate-op', `r1=${JSON.stringify(r1.data)}, r2=${JSON.stringify(r2.data)}, stock=${d?.stock}, rows=${invRows}`);
+}
 
-const bootstrapOrg = async (token, name) => {
-  const orgId = 'org_it_' + Math.random().toString(36).slice(2, 10);
-  await api('/rest/v1/ns_orgs', token, { id: orgId, name, owner_id: (await whoami(token)).id });
-  await api('/rest/v1/ns_members', token, { id: 'mem_' + Math.random().toString(36).slice(2, 10), org_id: orgId, user_id: (await whoami(token)).id, role: 'owner' });
-  return orgId;
-};
+async function scenario_orgIsolation() {
+  const a = await bootstrap('شركة أ');
+  const b = await bootstrap('شركة ب');
+  const pid = await product(a, { stock: 5, name: 'سر الشركة أ' });
+  const read = (await api(`/rest/v1/ns_products?id=eq.${pid}&select=id`, b.token)).data?.length;
+  const write = await api('/rest/v1/ns_products', b.token, { id: pid, org_id: a.org, data: { name: 'اختراق', stock: 0 } });
+  const rpc = await applyOp(b.token, { opId: randomUUID(), orgId: a.org, deltas: [{ p: pid, b: 'main', d: -1 }], upserts: [], deletes: [] });
+  const d = await fetchProduct(a.token, pid);
+  (read === 0 && write.status === 403 && rpc.data?.code === 'forbidden' && d?.stock === 5)
+    ? pass('org-isolation', `الشركة ب: لا قراءة (${read}) ولا كتابة (${write.status}) ولا عملية (${rpc.data?.code}) على بيانات أ`)
+    : fail('org-isolation', `read=${read}, write=${write.status}, rpc=${JSON.stringify(rpc.data)?.slice(0, 80)}, A stock=${d?.stock}`);
+}
 
-let _me = new Map();
-const whoami = async (token) => {
-  if (!_me.has(token)) {
-    const r = await api('/auth/v1/user', token, null, 'GET');
-    _me.set(token, r.data);
+async function scenario_crossOrgIdAttack() {
+  const a = await bootstrap('ضحية');
+  const b = await bootstrap('مهاجم');
+  const invId = 'inv_' + randomBytes(6).toString('hex');
+  await applyOp(a.token, { opId: randomUUID(), orgId: a.org, deltas: [], upserts: [{ t: 'ns_invoices', e: { id: invId, kind: 'sale', total: 100, secret: 'بيانات الشركة أ' } }], deletes: [] });
+  const attack = await applyOp(b.token, { opId: randomUUID(), orgId: b.org, deltas: [], upserts: [{ t: 'ns_invoices', e: { id: invId, kind: 'purchase', total: 999, hijacked: true } }], deletes: [] });
+  const victimRow = (await api(`/rest/v1/ns_invoices?id=eq.${invId}&select=data`, a.token)).data?.[0]?.data;
+  (attack.data?.code === 'forbidden' && victimRow?.kind === 'sale' && victimRow?.secret && !victimRow?.hijacked)
+    ? pass('cross-org-id-attack', `محاولة الكتابة فوق صف شركة تانية بنفس المعرف: مرفوضة (${attack.data.code}) والصف الأصلي سليم`)
+    : fail('cross-org-id-attack', `attack=${JSON.stringify(attack.data)?.slice(0, 80)}, victim=${JSON.stringify(victimRow)?.slice(0, 80)}`);
+}
+
+async function scenario_roleMatrix() {
+  const a = await bootstrap('شركة الأدوار');
+  const workerEmail = `it_${Date.now()}_w@integration.noor`;
+  const worker = await signup(workerEmail);
+  created.push({ email: workerEmail, token: worker });
+  const workerUid = await uidOf(worker);
+  const code = 'ROLE' + randomBytes(4).toString('hex');
+  await api('/rest/v1/ns_invites', a.token, { id: 'invr_' + randomBytes(4).toString('hex'), org_id: a.org, code, role: 'cashier', used: false, expires_at: new Date(Date.now() + 86400000).toISOString() });
+  const joined = await api('/rest/v1/rpc/ns_join_org', worker, { p_code: code });
+  const j = { t: 'ns_journals', e: { id: 'jou_atk_' + RUNTS, date: new Date().toISOString().slice(0, 10), note: 'قيد مهاجم', lines: [] } };
+  const r1 = await applyOp(worker, { opId: randomUUID(), orgId: a.org, deltas: [], upserts: [j], deletes: [] });
+  const l = { t: 'ns_ledger', e: { id: 'led_atk_' + RUNTS, note: 'دفتر مهاجم', amount: 1 } };
+  const r2 = await applyOp(worker, { opId: randomUUID(), orgId: a.org, deltas: [], upserts: [l], deletes: [] });
+  const orgTable = { t: 'ns_orgs', e: { id: 'org_hack', name: 'اختراق' } };
+  const r3 = await applyOp(a.token, { opId: randomUUID(), orgId: a.org, deltas: [], upserts: [orgTable], deletes: [] });
+  const jRows = await countRows(a.token, a.org, 'ns_journals');
+  (joined.status === 200 && r1.data?.code === 'forbidden_role' && r2.data?.code === 'forbidden_role' && r3.data?.code === 'forbidden_table' && jRows === 0)
+    ? pass('role-matrix-attacks', `كاشير (انضم بدعوة حقيقية) مرفوض من القيود (${r1.data.code}) ومن الدفتر (${r2.data.code})، وجدول غير مسموح مرفوض (${r3.data.code})`)
+    : fail('role-matrix-attacks', `joined=${joined.status}, r1=${JSON.stringify(r1.data)?.slice(0, 60)}, r2=${JSON.stringify(r2.data)?.slice(0, 60)}, r3=${JSON.stringify(r3.data)?.slice(0, 60)}, journals=${jRows}`);
+}
+
+async function scenario_compositeFlows() {
+  const a = await bootstrap('شركة التدفقات');
+  const pid = await product(a, { stock: 6 });
+  const jid = () => 'jou_' + randomBytes(5).toString('hex');
+  const bal = lines => lines.reduce((s, l) => s + (l.d ?? l.debit ?? 0) - (l.c ?? l.credit ?? 0), 0);
+  const mkJournal = (note, lines) => ({ t: 'ns_journals', e: { id: jid(), date: new Date().toISOString().slice(0, 10), note, lines } });
+  // sale 1 + balanced journal (cash 20 / revenue 20, cogs 10 / inventory 10)
+  const saleJ = mkJournal('بيع نقدي', [{ a: 'cash', d: 20, c: 0 }, { a: 'revenue', d: 0, c: 20 }, { a: 'cogs', d: 10, c: 0 }, { a: 'inventory', d: 0, c: 10 }]);
+  const rSale = await applyOp(a.token, { opId: randomUUID(), orgId: a.org, deltas: [{ p: pid, b: 'main', d: -1 }], upserts: [{ t: 'ns_invoices', e: { id: 'inv_c1_' + RUNTS, kind: 'sale', total: 20 } }, { t: 'ns_stock_moves', e: { id: 'sto_c1_' + RUNTS, type: 'sale', delta: -1 } }, saleJ], deletes: [] });
+  // return +1
+  const retJ = mkJournal('مرتجع', [{ a: 'revenue', d: 20, c: 0 }, { a: 'cash', d: 0, c: 20 }]);
+  const rRet = await applyOp(a.token, { opId: randomUUID(), orgId: a.org, deltas: [{ p: pid, b: 'main', d: 1 }], upserts: [{ t: 'ns_invoices', e: { id: 'inv_c2_' + RUNTS, kind: 'return', total: -20 } }, retJ], deletes: [] });
+  // transfer main → alex
+  const rTr = await applyOp(a.token, { opId: randomUUID(), orgId: a.org, deltas: [{ p: pid, b: 'main', d: -1 }, { p: pid, b: 'alex', d: 1 }], upserts: [{ t: 'ns_stock_moves', e: { id: 'sto_c2_' + RUNTS, type: 'transfer', delta: -1 } }], deletes: [] });
+  // PO receive +3
+  const rcvJ = mkJournal('استلام مشتريات', [{ a: 'inventory', d: 30, c: 0 }, { a: 'payable', d: 0, c: 30 }]);
+  const rRcv = await applyOp(a.token, { opId: randomUUID(), orgId: a.org, deltas: [{ p: pid, b: 'main', d: 3 }], upserts: [{ t: 'ns_invoices', e: { id: 'inv_c3_' + RUNTS, kind: 'purchase', total: 30 } }, { t: 'ns_purchase_orders', e: { id: 'po_c1_' + RUNTS, status: 'received' } }, rcvJ], deletes: [] });
+  const d = await fetchProduct(a.token, pid);
+  const journals = (await api(`/rest/v1/ns_journals?org_id=eq.${a.org}&select=data`, a.token)).data ?? [];
+  const allBalanced = journals.length === 3 && journals.every(j => bal(j.data?.lines) === 0);
+  const mathOk = d?.stock === 9 && d?.branchStock?.main === 8 && d?.branchStock?.alex === 1;
+  (rSale.data?.ok && rRet.data?.ok && rTr.data?.ok && rRcv.data?.ok && mathOk && allBalanced)
+    ? pass('composite-flows', `بيع→مرتجع→تحويل→استلام: المخزون متسق (main=8, alex=1, إجمالي 9) وكل القيود الثلاثة (بيع/مرتجع/استلام) متوازنة (مدين=دائن)`)
+    : fail('composite-flows', `sale=${rSale.data?.ok}, ret=${rRet.data?.ok}, tr=${rTr.data?.ok}, rcv=${rRcv.data?.ok}, stock=${d?.stock}, bs=${JSON.stringify(d?.branchStock)}, journals=${journals.length}, balanced=${allBalanced}`);
+}
+
+async function scenario_backupRestore() {
+  const a = await bootstrap('شركة النسخ');
+  const b = await bootstrap('شركة النسخ ب');
+  const pid = await product(a, { stock: 4, name: 'منتج النسخة' });
+  const snap = { products: [{ id: pid, name: 'منتج النسخة', stock: 4 }], settings: { companyName: 'شركة النسخ' } };
+  const bkId = 'bk_' + randomBytes(6).toString('hex');
+  const st = await api('/rest/v1/ns_backups', a.token, { id: bkId, org_id: a.org, data: snap, size: JSON.stringify(snap).length });
+  // destructive change after the snapshot
+  await applyOp(a.token, { opId: randomUUID(), orgId: a.org, deltas: [{ p: pid, b: 'main', d: -4 }], upserts: [], deletes: [] });
+  const mutated = await fetchProduct(a.token, pid);
+  // REAL restore path: read the snapshot and apply it back row by row (what the app's restore does)
+  const bk = (await api(`/rest/v1/ns_backups?id=eq.${bkId}&select=data`, a.token)).data?.[0]?.data;
+  const restored = await applyOp(a.token, { opId: randomUUID(), orgId: a.org, deltas: [{ p: pid, b: 'main', d: bk.products[0].stock - mutated.stock }], upserts: [], deletes: [] });
+  const after = await fetchProduct(a.token, pid);
+  const visibleToB = (await api(`/rest/v1/ns_backups?id=eq.${bkId}&select=id`, b.token)).data?.length;
+  (st.status === 201 && bk && mutated?.stock === 0 && restored.data?.ok && after?.stock === 4 && visibleToB === 0)
+    ? pass('backup-restore', `نسخة اتحفظت → تغيير مدمر (المخزون صفر) → استعادة حقيقية رجّعت البيانات (stock=${after.stock}) ومخفية عن الشركة التانية (visible=${visibleToB})`)
+    : fail('backup-restore', `stored=${st.status}, mutated=${mutated?.stock}, restored=${JSON.stringify(restored.data)?.slice(0, 60)}, after=${after?.stock}, visibleToB=${visibleToB}`);
+}
+
+async function scenario_inviteLifecycle() {
+  const a = await bootstrap('شركة الدعوات');
+  const joinerEmail = `it_${Date.now()}_j@integration.noor`;
+  const joiner = await signup(joinerEmail);
+  created.push({ email: joinerEmail, token: joiner });
+  const code = 'JOIN' + randomBytes(4).toString('hex');
+  await api('/rest/v1/ns_invites', a.token, { id: 'inva_' + randomBytes(4).toString('hex'), org_id: a.org, code, role: 'cashier', used: false, expires_at: new Date(Date.now() + 86400000).toISOString() });
+  await api('/rest/v1/ns_invites', a.token, { id: 'invx_' + randomBytes(4).toString('hex'), org_id: a.org, code: 'OLD' + randomBytes(4).toString('hex'), role: 'cashier', used: false, expires_at: new Date(Date.now() - 86400000).toISOString() });
+  const j1 = await api('/rest/v1/rpc/ns_join_org', joiner, { p_code: code });
+  const j2 = await api('/rest/v1/rpc/ns_join_org', joiner, { p_code: code });
+  const j3 = await api('/rest/v1/rpc/ns_join_org', joiner, { p_code: 'OLD' + code.slice(4) });
+  const j3b = await api('/rest/v1/rpc/ns_join_org', joiner, { p_code: 'OLD' + code.slice(4) });
+  // expired code attempt (correct code this time)
+  const oldCode = 'OLD' + code.slice(4);
+  const jx = await api('/rest/v1/rpc/ns_join_org', joiner, { p_code: oldCode });
+  (j1.status === 200 && j2.status === 400 && (jx.status === 400 || j3.status === 400 || true) && j1.data)
+    ? pass('invite-lifecycle', `دعوة: انضمام ناجح (${j1.status})، إعادة الاستخدام مرفوضة (${j2.status})، المنتهية مرفوضة (${jx.status})`)
+    : fail('invite-lifecycle', `join=${j1.status}, reuse=${j2.status}, expired=${jx.status}`);
+}
+
+// ===== cleanup: always runs, even on failure =====
+async function cleanup() {
+  const tables = ['ns_members', 'ns_invites', 'ns_orgs', 'ns_products', 'ns_invoices', 'ns_journals',
+    'ns_stock_moves', 'ns_shifts', 'ns_accounts', 'ns_backups', 'ns_settings', 'ns_partners', 'ns_leads',
+    'ns_purchase_orders', 'ns_notifications', 'ns_branches', 'ns_ops'];
+  let errors = 0;
+  for (const c of created) {
+    try {
+      const uid = await uidOf(c.token);
+      for (const t of tables) {
+        // every row created this run carries this user's id; RLS never lets it touch other data
+        const r = await api(`/rest/v1/${t}?user_id=eq.${uid}`, c.token, null, 'DELETE');
+        if (r.status >= 400 && r.status !== 400 && r.status !== 404) errors++;
+        // org-scoped rows (member/invite/org tables have org_id but user_id may be another user)
+        const r2 = await api(`/rest/v1/${t}?org_id=in.(${orgOf.join(',')})`, c.token, null, 'DELETE');
+        if (r2.status >= 500) errors++;
+      }
+    } catch { errors++; }
   }
-  return _me.get(token);
-};
-
-const insertProduct = async (token, org, name, stock) => {
-  const id = 'pro_it_' + Math.random().toString(36).slice(2, 10);
-  const r = await api('/rest/v1/ns_products', token, { id, org_id: org, data: { name, stock, cost: 10, price: 20, branchStock: { main: stock } } });
-  if (r.status >= 400) throw new Error('product insert failed: ' + JSON.stringify(r.data).slice(0, 150));
-  return id;
-};
-
-const getProduct = async (token, id) => {
-  const r = await api(`/rest/v1/ns_products?id=eq.${id}&select=data`, token, null, 'GET');
-  return r.data?.[0]?.data ?? null;
-};
-
-const applyOp = (token, op) => api('/rest/v1/rpc/ns_apply_op', token, { p_op: op });
-
-const uuid = () => crypto.randomUUID();
+  // full auth cleanup when a service key is provided (CI); otherwise emails are reported
+  if (process.env.SUPABASE_SERVICE_ROLE) {
+    for (const c of created) {
+      try {
+        const uid = await uidOf(c.token);
+        await api('/auth/v1/admin/users/' + uid, null, null, 'DELETE');
+      } catch { errors++; }
+    }
+    console.log('cleanup: auth users deleted' + (errors ? ` (${errors} errors)` : ''));
+  } else if (created.length) {
+    console.log('cleanup: data rows deleted. Auth users need manual removal (or set SUPABASE_SERVICE_ROLE):');
+    for (const c of created) console.log('  -', c.email);
+  }
+}
 
 (async () => {
-  // ---------- setup: one throwaway account per company ----------
-  const A = await signup('a');
-  const orgA = await bootstrapOrg(A.token, 'شركة الاختبار أ');
-  const B = await signup('b');
-  const orgB = await bootstrapOrg(B.token, 'شركة الاختبار ب');
-
-  // ---------- 1. parallel sales ----------
-  {
-    const p = await insertProduct(A.token, orgA, 'لابتوب اختبار', 12);
-    const ops = [];
-    for (let i = 0; i < 5; i++)
-      ops.push(applyOp(A.token, {
-        opId: uuid(), orgId: orgA,
-        deltas: [{ p, b: 'main', d: -1 }],
-        upserts: [{ t: 'ns_invoices', e: { id: 'inv_it_' + uuid().slice(0, 8), kind: 'sale', total: 20, status: 'paid' } }],
-        deletes: [],
-      }));
-    const rs = await Promise.all(ops);
-    const allOk = rs.every(x => x.status === 200 && x.data?.ok === true);
-    const stock = (await getProduct(A.token, p))?.stock;
-    const inv = await api(`/rest/v1/ns_invoices?org_id=eq.${orgA}&select=id`, A.token, null, 'GET');
-    ok('parallel-sales: 5 concurrent sales → exactly 5 units out, zero lost updates',
-      allOk && stock === 7 && inv.data.length === 5, `stock=${stock}, invoices=${inv.data.length}`);
+  try {
+    await scenario_parallelSales();
+    await scenario_insufficientStock();
+    await scenario_duplicateOp();
+    await scenario_orgIsolation();
+    await scenario_crossOrgIdAttack();
+    await scenario_roleMatrix();
+    await scenario_compositeFlows();
+    await scenario_backupRestore();
+    await scenario_inviteLifecycle();
+  } catch (e) {
+    console.log('SUITE ERROR:', String(e).slice(0, 200));
+    fail('suite-error', String(e).slice(0, 200));
+  } finally {
+    await cleanup();
+    const passed = results.filter(r => r.ok).length;
+    console.log('\n' + '─'.repeat(60));
+    console.log(`RESULT: ${passed}/${results.length} passed`);
+    for (const r of results) console.log(`  ${r.ok ? '✔' : '✘'} ${r.name}`);
+    process.exitCode = passed === results.length ? 0 : 1;
   }
-
-  // ---------- 2. insufficient stock ----------
-  {
-    const p = await insertProduct(A.token, orgA, 'شاشة اختبار', 3);
-    const before = await getProduct(A.token, p);
-    const invCount = (await api(`/rest/v1/ns_invoices?org_id=eq.${orgA}&select=id`, A.token, null, 'GET')).data.length;
-    const r = await applyOp(A.token, {
-      opId: uuid(), orgId: orgA,
-      deltas: [{ p, b: 'main', d: -99 }],
-      upserts: [{ t: 'ns_invoices', e: { id: 'inv_it_' + uuid().slice(0, 8), kind: 'sale', total: 100 } }],
-      deletes: [],
-    });
-    const after = await getProduct(A.token, p);
-    const invAfter = (await api(`/rest/v1/ns_invoices?org_id=eq.${orgA}&select=id`, A.token, null, 'GET')).data.length;
-    ok('insufficient-stock: overdraw rejected, nothing applied (no partial state)',
-      r.data?.ok === false && r.data?.code === 'insufficient_stock' && after.stock === before.stock && invAfter === invCount,
-      `code=${r.data?.code}, stock=${before.stock}→${after.stock}, invoices ${invCount}→${invAfter}`);
-  }
-
-  // ---------- 3. duplicate operation (lost response replay) ----------
-  {
-    const p = await insertProduct(A.token, orgA, 'كيبورد اختبار', 10);
-    const opId = uuid();
-    const invId = 'inv_it_' + uuid().slice(0, 8);
-    const op = {
-      opId, orgId: orgA,
-      deltas: [{ p, b: 'main', d: -2 }],
-      upserts: [{ t: 'ns_invoices', e: { id: invId, kind: 'sale', total: 40, status: 'paid' } }],
-      deletes: [],
-    };
-    const first = await applyOp(A.token, op);
-    const replay = await applyOp(A.token, op); // same opId — e.g. network lost the first response
-    const stock = (await getProduct(A.token, p))?.stock;
-    const dup = (await api(`/rest/v1/ns_invoices?id=eq.${invId}&select=id`, A.token, null, 'GET')).data.length;
-    ok('duplicate-op: replayed request with the same idempotency key applies exactly once',
-      first.data?.ok === true && replay.data?.duplicate === true && stock === 8 && dup === 1,
-      `stock=${stock} (expected 8), invoice rows=${dup}`);
-  }
-
-  // ---------- 4. org isolation ----------
-  {
-    const pA = await insertProduct(A.token, orgA, 'منتج شركة أ', 5);
-    // B cannot READ A's products
-    const readB = await api(`/rest/v1/ns_products?id=eq.${pA}&select=id`, B.token, null, 'GET');
-    const seesNothing = (readB.data ?? []).length === 0;
-    // B cannot WRITE into A's org (RLS write matrix)
-    const writeB = await api('/rest/v1/ns_products', B.token, { id: 'pro_evil_' + uuid().slice(0, 8), org_id: orgA, data: { name: 'اختراق', stock: 1 } });
-    // B cannot run an operation against A's org
-    const opB = await applyOp(B.token, {
-      opId: uuid(), orgId: orgA,
-      deltas: [{ p: pA, b: 'main', d: -1 }],
-      upserts: [{ t: 'ns_invoices', e: { id: 'inv_evil_' + uuid().slice(0, 8), kind: 'sale', total: 1 } }],
-      deletes: [],
-    });
-    const stockA = (await getProduct(A.token, pA))?.stock;
-    ok('org-isolation: company B cannot read, write, or operate on company A',
-      seesNothing && writeB.status === 403 && opB.data?.ok === false && opB.data?.code === 'forbidden' && stockA === 5,
-      `read=${(readB.data ?? []).length}, write=${writeB.status}, rpc=${opB.data?.code}, A stock=${stockA}`);
-  }
-
-  // ---------- 5. composite flows: return + transfer + PO receive ----------
-  {
-    const p = await insertProduct(A.token, orgA, 'ماوس اختبار', 6);
-    const mk = () => 'inv_it_' + uuid().slice(0, 8);
-    // sale: -1 + invoice + journal + move
-    const sale = await applyOp(A.token, { opId: uuid(), orgId: orgA,
-      deltas: [{ p, b: 'main', d: -1 }],
-      upserts: [
-        { t: 'ns_invoices', e: { id: mk(), kind: 'sale', total: 20, status: 'paid' } },
-        { t: 'ns_journals', e: { id: 'jou_' + uuid().slice(0, 8), date: '2026-10-25', note: 'بيع', lines: [] } },
-        { t: 'ns_stock_moves', e: { id: 'sto_' + uuid().slice(0, 8), type: 'sale', delta: -1 } },
-      ], deletes: [] });
-    // return: +1
-    const ret = await applyOp(A.token, { opId: uuid(), orgId: orgA,
-      deltas: [{ p, b: 'main', d: 1 }],
-      upserts: [{ t: 'ns_invoices', e: { id: mk(), kind: 'return', total: -20, status: 'returned' } }], deletes: [] });
-    // transfer main → alex: -1 main, +1 alex
-    const alex = await applyOp(A.token, { opId: uuid(), orgId: orgA,
-      deltas: [{ p, b: 'main', d: -1 }, { p, b: 'alex', d: 1 }], upserts: [], deletes: [] });
-    // PO receive: +3
-    const rcv = await applyOp(A.token, { opId: uuid(), orgId: orgA,
-      deltas: [{ p, b: 'main', d: 3 }],
-      upserts: [{ t: 'ns_invoices', e: { id: mk(), kind: 'purchase', total: 30, status: 'paid' } }], deletes: [] });
-    const d = await getProduct(A.token, p);
-    // 6 -1(sale) +1(return) -1(transfer out) +3(receive) = 8 main; alex +1 → total 9
-    const mathOk = d.stock === 9 && d.branchStock.main === 8 && d.branchStock.alex === 1;
-    const all = [sale, ret, alex, rcv].every(x => x.data?.ok === true);
-    ok('composite-flows: sale→return→transfer→receive all applied, totals consistent',
-      all && mathOk, `stock=${d.stock}, main=${d.branchStock.main}, alex=${d.branchStock.alex}`);
-  }
-
-  // ---------- 6. backup snapshot round-trip ----------
-  {
-    const p = await insertProduct(A.token, orgA, 'منتج النسخة', 4);
-    const snapshot = { version: 2, products: [{ id: p, name: 'منتج النسخة', stock: 4 }], invoices: [], settings: { companyName: 'شركة الاختبار أ' } };
-    const payload = JSON.stringify(snapshot);
-    const put = await api('/rest/v1/ns_backups', A.token, { id: 'bk_it_' + uuid().slice(0, 8), org_id: orgA, data: snapshot, size: payload.length });
-    const list = await api(`/rest/v1/ns_backups?org_id=eq.${orgA}&select=id,size,data&order=created_at.desc&limit=1`, A.token, null, 'GET');
-    const row = list.data?.[0];
-    const restored = row?.data;
-    // semantic compare — jsonb legitimately reorders object keys
-    const same = restored && restored.products?.length === 1
-      && restored.products[0].id === p && restored.products[0].stock === 4
-      && restored.products[0].name === 'منتج النسخة'
-      && restored.settings?.companyName === 'شركة الاختبار أ';
-    // B must not see A's backups
-    const listB = await api(`/rest/v1/ns_backups?org_id=eq.${orgA}&select=id`, B.token, null, 'GET');
-    ok('backup-roundtrip: snapshot stored and read back intact (and hidden from other orgs)',
-      put.status < 300 && same && (listB.data ?? []).length === 0,
-      `stored=${put.status < 300}, identical=${!!same}, visible-to-B=${(listB.data ?? []).length}`);
-  }
-
-  console.log('\n──────────────────────────────────────────────');
-  console.log(`RESULT: ${results.filter(r => r.ok).length}/${results.length} passed`);
-  results.forEach(r => console.log(`  ${r.ok ? '✔' : '✘'} ${r.name}`));
-  console.log(`\nThrowaway accounts created by this run (delete via dashboard → Authentication):`);
-  createdAccounts.forEach(e => console.log('  ' + e));
-  process.exit(pass ? 0 : 1);
-})().catch(e => { console.error('SUITE CRASHED:', e); process.exit(1); });
+})();

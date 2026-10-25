@@ -66,6 +66,54 @@ BEGIN
     created_at timestamptz DEFAULT now())';
   EXECUTE 'ALTER TABLE public.ns_ops ENABLE ROW LEVEL SECURITY';
 END $$;
+-- 2) Multi-tenant layer — organizations, members, invites
+-- =============================================================================
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_tables WHERE schemaname = current_schema() AND tablename = 'ns_orgs') THEN
+    CREATE TABLE public.ns_orgs (
+      id text PRIMARY KEY,
+      name text NOT NULL,
+      owner_id uuid NOT NULL,
+      created_at timestamptz DEFAULT now(),
+      updated_at timestamptz DEFAULT now());
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_tables WHERE schemaname = current_schema() AND tablename = 'ns_members') THEN
+    CREATE TABLE public.ns_members (
+      id text PRIMARY KEY,
+      org_id text NOT NULL REFERENCES public.ns_orgs(id) ON DELETE CASCADE,
+      user_id uuid NOT NULL,
+      role text NOT NULL,
+      created_at timestamptz DEFAULT now(),
+      updated_at timestamptz DEFAULT now(),
+      UNIQUE (org_id, user_id));
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_tables WHERE schemaname = current_schema() AND tablename = 'ns_invites') THEN
+    CREATE TABLE public.ns_invites (
+      id text PRIMARY KEY,
+      org_id text NOT NULL,
+      code text NOT NULL UNIQUE,
+      role text NOT NULL,
+      used boolean NOT NULL DEFAULT false,
+      expires_at timestamptz,
+      created_at timestamptz DEFAULT now());
+  END IF;
+END $$;
+-- ===== migrations for existing databases (all no-op on a fresh install) =====
+-- org-layer tables predate updated_at; the ns_touch trigger below needs it
+ALTER TABLE public.ns_orgs ADD COLUMN IF NOT EXISTS updated_at timestamptz DEFAULT now();
+ALTER TABLE public.ns_members ADD COLUMN IF NOT EXISTS updated_at timestamptz DEFAULT now();
+ALTER TABLE public.ns_invites ADD COLUMN IF NOT EXISTS updated_at timestamptz DEFAULT now();
+-- pre-2.8 data tables lack org_id (upgrade from a single-user install)
+DO $$
+DECLARE t text;
+BEGIN
+  FOREACH t IN ARRAY ARRAY['ns_products','ns_partners','ns_invoices','ns_leads','ns_employees','ns_attendance','ns_tasks','ns_ledger','ns_purchase_orders','ns_notifications','ns_stock_moves','ns_shifts','ns_accounts','ns_journals','ns_branches','ns_backups']
+  LOOP
+    EXECUTE format('ALTER TABLE public.%I ADD COLUMN IF NOT EXISTS org_id text', t);
+  END LOOP;
+END $$;
+
 
 -- keep updated_at fresh on every write (PostgREST upserts don't set it)
 CREATE OR REPLACE FUNCTION public.ns_touch() RETURNS trigger
@@ -87,38 +135,8 @@ BEGIN
   END LOOP;
 END $$;
 
+
 -- =============================================================================
--- 2) Multi-tenant layer — organizations, members, invites
--- =============================================================================
-DO $$
-BEGIN
-  IF NOT EXISTS (SELECT 1 FROM pg_tables WHERE tablename = 'ns_orgs') THEN
-    CREATE TABLE public.ns_orgs (
-      id text PRIMARY KEY,
-      name text NOT NULL,
-      owner_id uuid NOT NULL,
-      created_at timestamptz DEFAULT now());
-  END IF;
-  IF NOT EXISTS (SELECT 1 FROM pg_tables WHERE tablename = 'ns_members') THEN
-    CREATE TABLE public.ns_members (
-      id text PRIMARY KEY,
-      org_id text NOT NULL REFERENCES public.ns_orgs(id) ON DELETE CASCADE,
-      user_id uuid NOT NULL,
-      role text NOT NULL,
-      created_at timestamptz DEFAULT now(),
-      UNIQUE (org_id, user_id));
-  END IF;
-  IF NOT EXISTS (SELECT 1 FROM pg_tables WHERE tablename = 'ns_invites') THEN
-    CREATE TABLE public.ns_invites (
-      id text PRIMARY KEY,
-      org_id text NOT NULL,
-      code text NOT NULL UNIQUE,
-      role text NOT NULL,
-      used boolean NOT NULL DEFAULT false,
-      expires_at timestamptz,
-      created_at timestamptz DEFAULT now());
-  END IF;
-END $$;
 ALTER TABLE public.ns_orgs ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.ns_members ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.ns_invites ENABLE ROW LEVEL SECURITY;
@@ -336,7 +354,7 @@ BEGIN
 END $$;
 
 -- =============================================================================
--- 4) ns_apply_op — atomic composite operations with idempotency
+-- 4) ns_apply_op — atomic composite operations with idempotency + hardened permissions
 -- =============================================================================
 -- Applies an operation = { opId, orgId, upserts[], deltas[], deletes[] } in a
 -- single transaction:
@@ -345,7 +363,10 @@ END $$;
 --   * deltas: per-branch stock changes, applied against the locked product row
 --             (server-side source of truth, no lost updates), rejected when
 --             stock is insufficient — the whole operation rolls back cleanly.
---   * upserts/deletes: regular rows (invoice, journal entries, moves...).
+--   * upserts/deletes: fixed table allowlist + a per-table role matrix enforced
+--             INSIDE this function (it runs as SECURITY DEFINER and bypasses
+--             RLS), plus row-ownership checks — an existing id belonging to
+--             another org/user can never be overwritten.
 -- Business rejections return {ok:false, code, msg}; transport failures raise
 -- nothing and are retried safely by the client (idempotency key).
 
@@ -355,96 +376,102 @@ DECLARE
   v_user uuid := auth.uid();
   v_org text := p_op->>'orgId';
   v_opid text := p_op->>'opId';
-  v_role text; u jsonb; d jsonb; r jsonb;
-  v_id text; v_br text; v_dlt numeric;
-  v_prev jsonb; v_bs jsonb; v_tot numeric;
-  v_entry jsonb;
+  v_role text; u jsonb; d jsonb; t text; e jsonb;
+  v_id text; v_br text; v_dlt numeric; v_new numeric;
+  v_prev jsonb; v_bs jsonb; v_entry jsonb; v_computed jsonb; v_tot numeric;
+  v_row_org text; v_row_user uuid; v_req text[];
   pr record;
-  v_computed jsonb := '{}';
 BEGIN
   IF v_user IS NULL THEN RETURN jsonb_build_object('ok', false, 'code', 'unauthenticated'); END IF;
-  IF v_opid IS NULL OR v_org IS NULL OR v_opid = '' THEN
-    RETURN jsonb_build_object('ok', false, 'code', 'bad_request', 'msg', 'العملية بدون معرف'); END IF;
-
+  IF v_opid IS NULL OR v_org IS NULL THEN RETURN jsonb_build_object('ok', false, 'code', 'bad_request'); END IF;
   IF EXISTS (SELECT 1 FROM public.ns_ops WHERE id = v_opid) THEN
     RETURN jsonb_build_object('ok', true, 'duplicate', true);
   END IF;
-
-  -- membership check: a non-member yields NULL, which must reject (NOT IN
-  -- alone does not match NULL and would let strangers through)
-  SELECT m.role INTO v_role FROM public.ns_members m
-    WHERE m.org_id = v_org AND m.user_id = v_user;
+  SELECT m.role INTO v_role FROM public.ns_members m WHERE m.org_id = v_org AND m.user_id = v_user;
   IF v_role IS NULL OR v_role NOT IN ('owner','manager','accountant','cashier','warehouse','sales') THEN
     RETURN jsonb_build_object('ok', false, 'code', 'forbidden', 'msg', 'ليست لديك صلاحية تنفيذ هذه العملية');
   END IF;
 
-  -- pass 1: lock + validate, accumulating ALL deltas of the same product onto
-  -- one map (each product row is read exactly once — never recomputed from a
-  -- stale snapshot). No writes happen in this pass.
-  FOR d IN SELECT * FROM jsonb_array_elements(COALESCE(p_op->'deltas', '[]'::jsonb)) LOOP
+  -- stock deltas: permission = whoever may write stock moves; lock rows, validate, accumulate
+  IF jsonb_array_length(COALESCE(p_op->'deltas','[]'::jsonb)) > 0 AND v_role NOT IN ('owner','manager','cashier','warehouse','sales') THEN
+    RETURN jsonb_build_object('ok', false, 'code', 'forbidden', 'msg', 'دورك لا يسمح بتعديل المخزون');
+  END IF;
+  v_computed := '{}'::jsonb;
+  FOR d IN SELECT * FROM jsonb_array_elements(COALESCE(p_op->'deltas','[]'::jsonb)) LOOP
     v_id := d->>'p'; v_br := d->>'b'; v_dlt := (d->>'d')::numeric;
     IF (v_computed->v_id) IS NULL THEN
-      SELECT p.data INTO v_prev FROM public.ns_products p
-        WHERE p.id = v_id AND (p.org_id = v_org OR (p.org_id IS NULL AND p.user_id = v_user))
-        FOR UPDATE;
-      IF v_prev IS NULL THEN
-        RETURN jsonb_build_object('ok', false, 'code', 'product_not_found', 'msg', 'منتج غير موجود في هذه الشركة');
-      END IF;
+      SELECT data INTO v_prev FROM public.ns_products WHERE id = v_id AND (org_id = v_org OR (org_id IS NULL AND user_id = v_user)) FOR UPDATE;
+      IF v_prev IS NULL THEN RETURN jsonb_build_object('ok', false, 'code', 'product_not_found', 'msg', 'منتج غير موجود: ' || v_id); END IF;
       v_bs := COALESCE(v_prev->'branchStock', jsonb_build_object('main', COALESCE(v_prev->'stock', '0'::jsonb)));
       v_computed := v_computed || jsonb_build_object(v_id, jsonb_build_object('prev', v_prev, 'bs', v_bs));
     END IF;
     v_entry := v_computed->v_id;
     v_bs := v_entry->'bs';
-    DECLARE
-      v_cur numeric := COALESCE((v_bs->>v_br)::numeric, 0);
-      v_new numeric := COALESCE((v_bs->>v_br)::numeric, 0) + v_dlt;
-      v_map jsonb := v_bs || jsonb_build_object(v_br, v_new);
-    BEGIN
-      IF v_new < 0 THEN
-        RETURN jsonb_build_object('ok', false, 'code', 'insufficient_stock',
-          'msg', 'المخزون غير كافٍ في الفرع المحدد (المتوفر: ' || v_cur || ')');
+    v_new := COALESCE((v_bs->>v_br)::numeric, 0) + v_dlt;
+    IF v_new < 0 THEN RETURN jsonb_build_object('ok', false, 'code', 'insufficient_stock', 'msg', 'المخزون غير كافٍ في الفرع (' || COALESCE(v_bs->>v_br, '0') || ' متاح)'); END IF;
+    v_computed := v_computed || jsonb_build_object(v_id, jsonb_build_object('prev', v_entry->'prev', 'bs', v_bs || jsonb_build_object(v_br, v_new)));
+  END LOOP;
+
+  -- upserts: fixed table allowlist + per-table role matrix + row-ownership check
+  FOR u IN SELECT * FROM jsonb_array_elements(COALESCE(p_op->'upserts','[]'::jsonb)) LOOP
+    t := u->>'t'; e := u->'e';
+    IF e IS NULL OR e->>'id' IS NULL THEN RETURN jsonb_build_object('ok', false, 'code', 'bad_row'); END IF;
+    v_req := CASE t
+      WHEN 'ns_products' THEN ARRAY['owner','manager','warehouse']
+      WHEN 'ns_partners' THEN ARRAY['owner','manager','accountant','cashier','sales']
+      WHEN 'ns_invoices' THEN ARRAY['owner','manager','accountant','cashier','sales']
+      WHEN 'ns_stock_moves' THEN ARRAY['owner','manager','cashier','warehouse','sales']
+      WHEN 'ns_shifts' THEN ARRAY['owner','manager','cashier']
+      WHEN 'ns_ledger' THEN ARRAY['owner','manager','accountant']
+      WHEN 'ns_journals' THEN ARRAY['owner','manager','accountant']
+      WHEN 'ns_accounts' THEN ARRAY['owner','manager','accountant']
+      WHEN 'ns_purchase_orders' THEN ARRAY['owner','manager','warehouse','accountant']
+      WHEN 'ns_notifications' THEN ARRAY['owner','manager','accountant','cashier','warehouse','sales']
+      WHEN 'ns_branches' THEN ARRAY['owner','manager','warehouse']
+      ELSE NULL END;
+    IF v_req IS NULL THEN RETURN jsonb_build_object('ok', false, 'code', 'forbidden_table', 'msg', 'جدول غير مسموح: ' || t); END IF;
+    IF NOT (v_role = ANY(v_req)) THEN RETURN jsonb_build_object('ok', false, 'code', 'forbidden_role', 'msg', 'دورك لا يسمح بالكتابة في ' || t); END IF;
+    EXECUTE format('SELECT org_id, user_id FROM public.%I WHERE id = $1', t) INTO v_row_org, v_row_user USING e->>'id';
+    IF v_row_org IS NOT NULL OR v_row_user IS NOT NULL THEN
+      IF v_row_org IS DISTINCT FROM v_org AND v_row_user IS DISTINCT FROM v_user THEN
+        RETURN jsonb_build_object('ok', false, 'code', 'forbidden', 'msg', 'الصف لا يتبع شركتك');
       END IF;
-      v_computed := v_computed || jsonb_build_object(v_id, jsonb_build_object('prev', v_entry->'prev', 'bs', v_map));
-    END;
-  END LOOP;
-
-  -- pass 2: validate row shapes (still no writes)
-  FOR u IN SELECT * FROM jsonb_array_elements(COALESCE(p_op->'upserts', '[]'::jsonb)) LOOP
-    IF u->'e' IS NULL OR (u->'e')->>'id' IS NULL THEN
-      RETURN jsonb_build_object('ok', false, 'code', 'bad_row', 'msg', 'صف غير صالح في العملية');
     END IF;
+    EXECUTE format('INSERT INTO public.%I (id, user_id, org_id, data, created_at, updated_at) VALUES ($1, $2, $3, $4, now(), now()) ON CONFLICT (id) DO UPDATE SET data = $4, updated_at = now()', t)
+      USING e->>'id', v_user, v_org, e;
   END LOOP;
 
-  -- pass 3: apply everything (single transaction — any failure rolls back all)
-  -- NOTE: pr must NOT reuse the jsonb-typed loop variable above — jsonb_each
-  -- yields a (key, value) record, and assigning it to a jsonb var would
-  -- coerce the record through json and explode (22P02).
+  -- deletes: same allowlist + matrix, already scoped to org/legacy ownership
+  FOR d IN SELECT * FROM jsonb_array_elements(COALESCE(p_op->'deletes','[]'::jsonb)) LOOP
+    t := d->>'t'; v_id := d->>'id';
+    v_req := CASE t
+      WHEN 'ns_invoices' THEN ARRAY['owner','manager']
+      WHEN 'ns_partners' THEN ARRAY['owner','manager']
+      WHEN 'ns_stock_moves' THEN ARRAY['owner','manager']
+      WHEN 'ns_shifts' THEN ARRAY['owner','manager']
+      WHEN 'ns_purchase_orders' THEN ARRAY['owner','manager']
+      WHEN 'ns_notifications' THEN ARRAY['owner','manager','accountant','cashier','warehouse','sales']
+      WHEN 'ns_branches' THEN ARRAY['owner','manager']
+      ELSE NULL END;
+    IF v_req IS NULL THEN RETURN jsonb_build_object('ok', false, 'code', 'forbidden_table'); END IF;
+    IF NOT (v_role = ANY(v_req)) THEN RETURN jsonb_build_object('ok', false, 'code', 'forbidden_role'); END IF;
+    EXECUTE format('DELETE FROM public.%I WHERE id = $1 AND (org_id = $2 OR (org_id IS NULL AND user_id = $3))', t)
+      USING v_id, v_org, v_user;
+  END LOOP;
+
   FOR pr IN SELECT * FROM jsonb_each(v_computed) LOOP
-    DECLARE
-      v_map2 jsonb := (pr.value)->'bs';
-    BEGIN
-      SELECT sum(sv::numeric) INTO v_tot FROM jsonb_each_text(v_map2) AS x(sk, sv);
-      UPDATE public.ns_products SET
-        data = jsonb_set(jsonb_set((pr.value)->'prev', '{branchStock}', v_map2), '{stock}', to_jsonb(v_tot)),
-        updated_at = now()
-      WHERE id = pr.key;
-    END;
-  END LOOP;
-  FOR u IN SELECT * FROM jsonb_array_elements(COALESCE(p_op->'upserts', '[]'::jsonb)) LOOP
-    EXECUTE format('INSERT INTO public.%I (id, user_id, org_id, data, created_at, updated_at)
-                    VALUES ($1, $2, $3, $4, now(), now())
-                    ON CONFLICT (id) DO UPDATE SET data = $4, updated_at = now()', u->>'t')
-      USING (u->'e')->>'id', v_user, v_org, u->'e';
-  END LOOP;
-  FOR r IN SELECT * FROM jsonb_array_elements(COALESCE(p_op->'deletes', '[]'::jsonb)) LOOP
-    EXECUTE format('DELETE FROM public.%I WHERE id = $1 AND (org_id = $2 OR (org_id IS NULL AND user_id = $3))', r->>'t')
-      USING r->>'id', v_org, v_user;
+    SELECT sum(v::numeric) INTO v_tot FROM jsonb_each_text((pr.value)->'bs') AS x(k, v);
+    UPDATE public.ns_products SET
+      data = jsonb_set(jsonb_set((pr.value)->'prev', '{branchStock}', (pr.value)->'bs'), '{stock}', to_jsonb(v_tot)),
+      updated_at = now()
+    WHERE id = pr.key;
   END LOOP;
 
-  INSERT INTO public.ns_ops (id, org_id, user_id) VALUES (v_opid, v_org, v_user);
+  INSERT INTO public.ns_ops (id, org_id, user_id, created_at) VALUES (v_opid, v_org, v_user, now());
   DELETE FROM public.ns_ops WHERE created_at < now() - interval '30 days';
   RETURN jsonb_build_object('ok', true);
 END $fn$;
+
 REVOKE ALL ON FUNCTION public.ns_apply_op(jsonb) FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.ns_apply_op(jsonb) TO authenticated;
 
