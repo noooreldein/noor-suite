@@ -8,12 +8,16 @@
     "dev": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview",
-    "test": "vitest run"
+    "test": "vitest run",
+    "desktop:dev": "tauri dev",
+    "desktop:build": "tauri build",
+    "desktop:icon": "tauri icon public/icon-512.png"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.109.0",
     "react": "^18.3.1",
-    "react-dom": "^18.3.1"
+    "react-dom": "^18.3.1",
+    "@tauri-apps/plugin-opener": "^2"
   },
   "devDependencies": {
     "@types/react": "^18.3.3",
@@ -22,6 +26,7 @@
     "jsdom": "^24.1.0",
     "typescript": "^5.5.3",
     "vite": "^5.4.0",
-    "vitest": "^2.0.2"
+    "vitest": "^2.0.2",
+    "@tauri-apps/cli": "^2"
   }
 }

@@ -1,0 +1,42 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Noor Suite",
+  "version": "3.2.0",
+  "identifier": "app.noor.suite",
+  "build": {
+    "beforeDevCommand": "npm run dev",
+    "devUrl": "http://localhost:5173",
+    "beforeBuildCommand": "npm run build",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "label": "main",
+        "title": "Noor Suite — نظام إدارة الأعمال",
+        "width": 1440,
+        "height": 900,
+        "minWidth": 1024,
+        "minHeight": 700,
+        "center": true
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self' 'unsafe-inline' 'unsafe-eval' data: blob:; connect-src 'self' https://zcsowvdfdteuiyaybnqm.supabase.co wss://zcsowvdfdteuiyaybnqm.supabase.co https://*.supabase.co wss://*.supabase.co; img-src 'self' data: blob: https:; font-src 'self' data:"
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "category": "Business",
+    "shortDescription": "نظام إدارة أعمال متكامل — مخازن، مبيعات، محاسبة",
+    "longDescription": "Noor Suite: نظام ERP عربي متكامل يعمل أوفلاين وبمزامنة سحابية اختيارية — لوحة تحكم، نقطة بيع، مخازن، فواتير، CRM، شؤون موظفين، محاسبة قيد مزدوج، وفروع.",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ]
+  }
+}

@@ -136,6 +136,16 @@ SUPABASE_URL=https://<ref>.supabase.co SUPABASE_ANON_KEY=<key> node tests/integr
 
 **النسخ الاحتياطية**: تُنشأ نسخة تلقائية كل 24 ساعة عند فتح النظام من أي جهاز (شرط وجود بيانات فعلية، وإحلال النسخ الفارغة)، ويُحتفظ بآخر 7 نسخ لكل شركة، مع استعادة يدوية كاملة من الإعدادات تعيد دفع البيانات للسحابة.
 
+## تطبيق سطح المكتب (Tauri 2)
+
+```bash
+npm run desktop:dev     # تشغيل كنافذة تطبيق أصلية
+npm run desktop:build   # بناء مثبت Windows (.msi/.exe) أو Linux (.deb/.AppImage) أو macOS (.dmg)
+```
+
+المثبتات تُبنى تلقائياً من GitHub: **Actions → Desktop Build → Run workflow**.
+الدليل الكامل والمتطلبات في [`docs/DESKTOP.md`](docs/DESKTOP.md).
+
 ## خارطة الطريق
 
 - [x] POS بورديات ودفع متعدد ومرتجعات

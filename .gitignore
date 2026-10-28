@@ -3,3 +3,7 @@ dist
 coverage
 *.local
 .DS_Store
+
+# Tauri
+src-tauri/target
+src-tauri/gen/schemas
