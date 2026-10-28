@@ -11,7 +11,8 @@
     "test": "vitest run",
     "desktop:dev": "tauri dev",
     "desktop:build": "tauri build",
-    "desktop:icon": "tauri icon public/icon-512.png"
+    "desktop:icon": "tauri icon public/icon-512.png",
+    "tauri": "tauri"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.109.0",
